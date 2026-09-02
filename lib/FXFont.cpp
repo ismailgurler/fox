@@ -1900,6 +1900,17 @@ FXbool FXFont::isFontMono() const {
   }
 
 
+// Prototype (Phase 3/3b): true if drawText() renders this font as a
+// pixel-perfect bitmap (X11 core font or parsed .FON), not through Xft.
+FXbool FXFont::isBitmapFont() const {
+#ifndef WIN32
+  return bitmapFont!=nullptr || fntFace!=nullptr;
+#else
+  return false;
+#endif
+  }
+
+
 // Get font width
 FXint FXFont::getFontWidth() const {
   if(xid){

@@ -364,6 +364,13 @@ public:
   /// Find out if the font is monotype or proportional
   virtual FXbool isFontMono() const;
 
+  /// Prototype (Phase 3/3b): true if this font renders as a genuine
+  /// pixel-perfect bitmap font (an X11 core font loaded by name, or a
+  /// parsed .FON/.FNT file) rather than through Xft. Xft-specific
+  /// settings (hinting, antialiasing, sub-pixel rendering, ...) have no
+  /// effect on such a font -- see PLAN.md, Phase 3.
+  FXbool isBitmapFont() const;
+
   /// See if font has glyph for ch
   virtual FXbool hasChar(FXwchar ch) const;
 

@@ -24,11 +24,44 @@ Branch: `feature/integer-pixel-scaling`.
     (verified against a scale=1 window manually resized to the same physical
     size). Text is back to unscaled (logical) size until glyph scaling is
     redone properly.
-  - **Still open in Phase 2**: `drawIcon`/`drawImage`/other `FXDCWindow`
-    primitives (`drawLine`, `drawArc`, `drawEllipse`, `drawArea`) and line
-    widths aren't scaled yet; `FXWindow` reparent path untouched; broader
-    input/event translation (drag, resize handles, scroll regions) not yet
-    systematic; only tested on Pathfinder, not multiple example apps.
+  - **Drawing primitives (commit `389e621`)**: scaled the remaining
+    `FXDCWindow` X11 primitives — `drawPoint`, `drawLine`, `drawRectangle`,
+    `drawRoundRectangle`, `drawArc`, `drawEllipse`, `fillRoundRectangle`,
+    `fillChord`, `fillArc`, `fillEllipse` (scalar geometry); destination
+    positions for `drawArea`/`drawImage`/`drawBitmap`/`drawIcon*`
+    (icon/image pixel content itself still native size — see item 4 below);
+    `drawHashBox`/`drawFocusRectangle` (raw `XFillRectangle` calls, bypassed
+    the already-scaled `fillRectangle`); `setLineWidth`; tile/stipple/clip-mask
+    origins.
+    - **Found and fixed a second real bug**: `clip`/`rect` are kept in
+      *logical* pixels throughout `FXDCWindow.cpp` (derived from
+      `FXDrawable::getWidth/Height`), but every
+      `XSetClipRectangles`/`XftDrawSetClipRectangles` call handed that
+      logical rectangle to X11/Xft directly, which expects physical pixels —
+      under-clipping (to a too-small physical region) any paint that goes
+      through `FXDCWindow(draw,event)`, the constructor essentially every
+      widget's `onPaint` uses, whenever a widget also narrows its own clip
+      (e.g. scrolled lists/trees/text via `setClipRectangle`). Added a
+      `scaledClipRect()` helper and applied it at every such call site.
+    - Verified on Pathfinder at scale=2 via a fresh `xwd` capture (`import
+      -window` proved unreliable/stale in this environment — prefer `xwd` +
+      `convert` for screenshots here): full window now paints completely and
+      correctly — button bevels, split-pane sash, scrollbar, and tree lines
+      all scale consistently. Icons remain native pixel size (expected).
+  - **Still open in Phase 2**:
+    1. Array/batch `FXDCWindow` primitives not scaled (`drawPoints`,
+       `drawLines`, `drawLineSegments`, `drawRectangles`, `drawArcs`,
+       `fillArcs`, `fillChords`, the `fillPolygon*` family) — lower priority,
+       used mostly by custom canvas drawing rather than standard widget
+       chrome, would need a scaled temporary copy of the caller's array.
+    2. Icon/image pixel content itself isn't resampled — `FXImage`/`FXBitmap`/
+       `FXIcon` need a nearest-neighbor upscale path (item 4 of the original
+       Phase 2 list).
+    3. `FXWindow` reparent path untouched.
+    4. Broader input/event translation (drag, resize handles, scroll
+       regions) not yet systematic — only mouse buttons/motion and
+       Configure/Expose are unscaled so far.
+    5. Only tested on Pathfinder, not multiple example apps.
   - **Glyph-size scaling needs redoing**: a font that renders bigger without
     lying about its logical metrics — e.g. a second, physically-scaled
     `XftFont` used only for drawing, while the font object's metric-query

@@ -1735,6 +1735,60 @@ static XRectangle scaledClipRect(const FXRectangle& r,FXint scale){
   }
 
 
+// Prototype: scale a caller-supplied array of points/rectangles/arcs/segments
+// to physical pixels into a freshly allocated buffer, for the array-based
+// drawing primitives below (see PLAN.md, Phase 2). Caller frees with
+// freeElms(); returns nullptr (and draws nothing) on allocation failure.
+static XPoint* scaledPoints(const FXPoint* points,FXuint npoints,FXint scale){
+  XPoint* result=nullptr;
+  if(allocElms(result,npoints)){
+    for(FXuint i=0; i<npoints; i++){
+      result[i].x=(short)(points[i].x*scale);
+      result[i].y=(short)(points[i].y*scale);
+      }
+    }
+  return result;
+  }
+
+static XRectangle* scaledRects(const FXRectangle* rects,FXuint n,FXint scale){
+  XRectangle* result=nullptr;
+  if(allocElms(result,n)){
+    for(FXuint i=0; i<n; i++){
+      result[i]=scaledClipRect(rects[i],scale);
+      }
+    }
+  return result;
+  }
+
+static XArc* scaledArcs(const FXArc* arcs,FXuint n,FXint scale){
+  XArc* result=nullptr;
+  if(allocElms(result,n)){
+    for(FXuint i=0; i<n; i++){
+      result[i].x=(short)(arcs[i].x*scale);
+      result[i].y=(short)(arcs[i].y*scale);
+      result[i].width=(unsigned short)(arcs[i].w*scale);
+      result[i].height=(unsigned short)(arcs[i].h*scale);
+      result[i].angle1=arcs[i].a;
+      result[i].angle2=arcs[i].b;
+      }
+    }
+  return result;
+  }
+
+static XSegment* scaledSegments(const FXSegment* segments,FXuint n,FXint scale){
+  XSegment* result=nullptr;
+  if(allocElms(result,n)){
+    for(FXuint i=0; i<n; i++){
+      result[i].x1=(short)(segments[i].x1*scale);
+      result[i].y1=(short)(segments[i].y1*scale);
+      result[i].x2=(short)(segments[i].x2*scale);
+      result[i].y2=(short)(segments[i].y2*scale);
+      }
+    }
+  return result;
+  }
+
+
 // Construct for expose event painting
 FXDCWindow::FXDCWindow(FXDrawable* draw,FXEvent* event):FXDC(draw->getApp()),surface(nullptr),rect(0,0,0,0),devfg(0),devbg(0){
 #ifdef HAVE_XFT_H
@@ -1855,14 +1909,20 @@ void FXDCWindow::drawPoint(FXint x,FXint y){
 // Draw points
 void FXDCWindow::drawPoints(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::drawPoints: DC not connected to drawable.\n"); }
-  XDrawPoints((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,CoordModeOrigin);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XDrawPoints((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,CoordModeOrigin);
+    freeElms(pts);
+    }
   }
 
 
 // Draw points relative
 void FXDCWindow::drawPointsRel(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::drawPointsRel: DC not connected to drawable.\n"); }
-  XDrawPoints((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,CoordModePrevious);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XDrawPoints((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,CoordModePrevious);
+    freeElms(pts);
+    }
   }
 
 
@@ -1877,21 +1937,30 @@ void FXDCWindow::drawLine(FXint x1,FXint y1,FXint x2,FXint y2){
 // Draw lines
 void FXDCWindow::drawLines(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::drawLines: DC not connected to drawable.\n"); }
-  XDrawLines((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,CoordModeOrigin);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XDrawLines((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,CoordModeOrigin);
+    freeElms(pts);
+    }
   }
 
 
 // Draw lines relative
 void FXDCWindow::drawLinesRel(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::drawLinesRel: DC not connected to drawable.\n"); }
-  XDrawLines((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,CoordModePrevious);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XDrawLines((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,CoordModePrevious);
+    freeElms(pts);
+    }
   }
 
 
 // Draw line segments
 void FXDCWindow::drawLineSegments(const FXSegment* segments,FXuint nsegments){
   if(!surface){ fxerror("FXDCWindow::drawLineSegments: DC not connected to drawable.\n"); }
-  XDrawSegments((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XSegment*>((const XSegment*)segments),nsegments);
+  if(XSegment* segs=scaledSegments(segments,nsegments,getApp()->getScale())){
+    XDrawSegments((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,segs,nsegments);
+    freeElms(segs);
+    }
   }
 
 
@@ -1906,7 +1975,10 @@ void FXDCWindow::drawRectangle(FXint x,FXint y,FXint w,FXint h){
 // Draw rectangles
 void FXDCWindow::drawRectangles(const FXRectangle* rectangles,FXuint nrectangles){
   if(!surface){ fxerror("FXDCWindow::drawRectangles: DC not connected to drawable.\n"); }
-  XDrawRectangles((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XRectangle*>((const XRectangle*)rectangles),nrectangles);
+  if(XRectangle* recs=scaledRects(rectangles,nrectangles,getApp()->getScale())){
+    XDrawRectangles((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,recs,nrectangles);
+    freeElms(recs);
+    }
   }
 
 
@@ -1960,7 +2032,10 @@ void FXDCWindow::drawArc(FXint x,FXint y,FXint w,FXint h,FXint ang1,FXint ang2){
 // Draw arcs
 void FXDCWindow::drawArcs(const FXArc* arcs,FXuint narcs){
   if(!surface){ fxerror("FXDCWindow::drawArcs: DC not connected to drawable.\n"); }
-  XDrawArcs((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XArc*>((const XArc*)arcs),narcs);
+  if(XArc* a=scaledArcs(arcs,narcs,getApp()->getScale())){
+    XDrawArcs((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,a,narcs);
+    freeElms(a);
+    }
   }
 
 
@@ -1984,7 +2059,10 @@ void FXDCWindow::fillRectangle(FXint x,FXint y,FXint w,FXint h){
 // Fill rectangles
 void FXDCWindow::fillRectangles(const FXRectangle* rectangles,FXuint nrectangles){
   if(!surface){ fxerror("FXDCWindow::fillRectangles: DC not connected to drawable.\n"); }
-  XFillRectangles((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XRectangle*>((const XRectangle*)rectangles),nrectangles);
+  if(XRectangle* recs=scaledRects(rectangles,nrectangles,getApp()->getScale())){
+    XFillRectangles((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,recs,nrectangles);
+    freeElms(recs);
+    }
   }
 
 
@@ -2037,9 +2115,12 @@ void FXDCWindow::fillChord(FXint x,FXint y,FXint w,FXint h,FXint ang1,FXint ang2
 // Fill chords
 void FXDCWindow::fillChords(const FXArc* chords,FXuint nchords){
   if(!surface){ fxerror("FXDCWindow::fillChords: DC not connected to drawable.\n"); }
-  XSetArcMode((Display*)getApp()->getDisplay(),(GC)ctx,ArcChord);
-  XFillArcs((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XArc*>((const XArc*)chords),nchords);
-  XSetArcMode((Display*)getApp()->getDisplay(),(GC)ctx,ArcPieSlice);
+  if(XArc* a=scaledArcs(chords,nchords,getApp()->getScale())){
+    XSetArcMode((Display*)getApp()->getDisplay(),(GC)ctx,ArcChord);
+    XFillArcs((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,a,nchords);
+    XSetArcMode((Display*)getApp()->getDisplay(),(GC)ctx,ArcPieSlice);
+    freeElms(a);
+    }
   }
 
 
@@ -2054,7 +2135,10 @@ void FXDCWindow::fillArc(FXint x,FXint y,FXint w,FXint h,FXint ang1,FXint ang2){
 // Fill arcs
 void FXDCWindow::fillArcs(const FXArc* arcs,FXuint narcs){
   if(!surface){ fxerror("FXDCWindow::fillArcs: DC not connected to drawable.\n"); }
-  XFillArcs((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XArc*>((const XArc*)arcs),narcs);
+  if(XArc* a=scaledArcs(arcs,narcs,getApp()->getScale())){
+    XFillArcs((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,a,narcs);
+    freeElms(a);
+    }
   }
 
 
@@ -2069,42 +2153,60 @@ void FXDCWindow::fillEllipse(FXint x,FXint y,FXint w,FXint h){
 // Fill polygon
 void FXDCWindow::fillPolygon(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::fillArcs: DC not connected to drawable.\n"); }
-  XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,Convex,CoordModeOrigin);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,Convex,CoordModeOrigin);
+    freeElms(pts);
+    }
   }
 
 
 // Fill concave polygon
 void FXDCWindow::fillConcavePolygon(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::fillConcavePolygon: DC not connected to drawable.\n"); }
-  XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,Nonconvex,CoordModeOrigin);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,Nonconvex,CoordModeOrigin);
+    freeElms(pts);
+    }
   }
 
 
 // Fill complex polygon
 void FXDCWindow::fillComplexPolygon(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::fillComplexPolygon: DC not connected to drawable.\n"); }
-  XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,Complex,CoordModeOrigin);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,Complex,CoordModeOrigin);
+    freeElms(pts);
+    }
   }
 
 
 // Fill polygon relative
 void FXDCWindow::fillPolygonRel(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::fillPolygonRel: DC not connected to drawable.\n"); }
-  XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,Convex,CoordModePrevious);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,Convex,CoordModePrevious);
+    freeElms(pts);
+    }
   }
 
 
 // Fill concave polygon relative
 void FXDCWindow::fillConcavePolygonRel(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::fillConcavePolygonRel: DC not connected to drawable.\n"); }
-  XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,Nonconvex,CoordModePrevious);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,Nonconvex,CoordModePrevious);
+    freeElms(pts);
+    }
   }
 
 
 // Fill complex polygon relative
 void FXDCWindow::fillComplexPolygonRel(const FXPoint* points,FXuint npoints){
   if(!surface){ fxerror("FXDCWindow::fillComplexPolygonRel: DC not connected to drawable.\n"); }
-  XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,const_cast<XPoint*>((const XPoint*)points),npoints,Complex,CoordModePrevious);
+  if(XPoint* pts=scaledPoints(points,npoints,getApp()->getScale())){
+    XFillPolygon((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,pts,npoints,Complex,CoordModePrevious);
+    freeElms(pts);
+    }
   }
 
 

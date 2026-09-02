@@ -137,8 +137,52 @@ Branch: `feature/integer-pixel-scaling`.
   scale=2 (table also at scale=3). Remaining known gaps are narrow and
   deliberately deferred, not blockers: `FXImage::restore()` (opt-in API,
   no internal callers), `FXWindow` popups/drag-corners/multi-monitor/GL
-  canvases (Phase 4 polish, per the original plan). Next up is Phase 3
-  (native bitmap font backend) or Phase 4 polish, as needed.
+  canvases (Phase 4 polish, per the original plan).
+
+- **Phase 3 (commit `888b1d0`): native bitmap font support, landed.**
+  `FXFont` gets a `bitmapFont` member (a genuine `XFontStruct*`, loaded
+  via classic `XLoadQueryFont`) alongside the normal Xft `font`/
+  `displayFont`, opt-in per font by name — `new FXFont(app,"9x15")` (the
+  existing single-string constructor already routes any comma-less name to
+  `hints=FXFont::X11`, so no new API was needed). Metrics
+  (`hasChar`/`getFontWidth`/`Height`/`Ascent`/`Descent`/`getCharWidth`/
+  `getTextWidth`/`getTextHeight`) branch to real `XFontStruct` logic
+  (copied from the existing but dormant-when-Xft-is-on XLFD backend) when
+  `bitmapFont` is set, so bitmap-font widgets lay out using the bitmap
+  font's real metrics. `FXDCWindow::drawBitmapText()` renders glyphs as
+  pixel-perfect NxN blocks: draws at native 1x onto an offscreen 1-bit
+  pixmap via classic `XDrawString16`, nearest-neighbor duplicates pixels
+  into NxN blocks for scale>1 (same technique as
+  `FXImage::scalePixelsUp()`), then uses the (scaled) bitmap as a clip
+  mask and fills through it with the foreground color — transparent
+  background, like `drawIcon()`'s mask, not an opaque box.
+  - Validated the core rendering technique with a standalone POC against
+    real PCF bitmap fonts already on this system (`/usr/share/fonts/X11/misc`,
+    e.g. `9x15`) *before* touching `FXFont`/`FXDCWindow` — this Linux
+    system doesn't need a `.FON` file to test against; the classic X11
+    core-font path was exactly the right vehicle.
+  - Hit two real, non-obvious rendering bugs while integrating (see the
+    commit message for full detail): (1) `XCopyPlane` paints an opaque
+    box (both fg and bg), and `FXDCWindow`'s default `devbg=0` happens to
+    be black too — came out as a solid black rectangle; switched to a
+    clip-mask + `fillRectangle` approach for transparency. (2) That clip
+    mask worked at scale=1 (drawn directly by the server) but came out
+    *inverted* at scale>1 (rebuilt client-side via `XGetImage`/
+    `XPutImage`): `XPutImage` with `XYBitmap` format treats the image as
+    a stencil using the GC's fg/bg pixels, and X11's default GC has
+    foreground=0/background=1 — exactly inverting the bit pattern on
+    upload. Fixed by setting foreground=1/background=0 on the upload GC.
+  - Verified: a minimal custom FOX app renders `9x15` bitmap-font text
+    correctly (transparent background, crisp NxN blocks confirmed by
+    pixel-level crop) across `FXLabel`, `FXButton`, and `FXTextField`,
+    alongside a normal Xft label in the same window, at scale=1, 2, 3.
+    Pathfinder at scale=2 (no bitmap font involved) confirmed unchanged.
+  - **Not done**: React95/`.FON`-specific testing (this used the system's
+    real PCF fonts instead, which satisfies the same "genuine bitmap
+    font, not a smoothed derivative" requirement); `FXText`/multi-line
+    widgets not specifically tested; array-based bitmap-font drawing
+    (`drawLine` etc. with a bitmap font active is irrelevant — only text
+    rendering is font-specific).
 
 ## High-Level Recap
 

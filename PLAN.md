@@ -48,20 +48,53 @@ Branch: `feature/integer-pixel-scaling`.
       `convert` for screenshots here): full window now paints completely and
       correctly — button bevels, split-pane sash, scrollbar, and tree lines
       all scale consistently. Icons remain native pixel size (expected).
-  - **Still open in Phase 2**:
-    1. Array/batch `FXDCWindow` primitives not scaled (`drawPoints`,
-       `drawLines`, `drawLineSegments`, `drawRectangles`, `drawArcs`,
-       `fillArcs`, `fillChords`, the `fillPolygon*` family) — lower priority,
-       used mostly by custom canvas drawing rather than standard widget
-       chrome, would need a scaled temporary copy of the caller's array.
-    2. Icon/image pixel content itself isn't resampled — `FXImage`/`FXBitmap`/
-       `FXIcon` need a nearest-neighbor upscale path (item 4 of the original
-       Phase 2 list).
-    3. `FXWindow` reparent path untouched.
-    4. Broader input/event translation (drag, resize handles, scroll
-       regions) not yet systematic — only mouse buttons/motion and
-       Configure/Expose are unscaled so far.
-    5. Only tested on Pathfinder, not multiple example apps.
+  - **Array/batch primitives (commit `d900aac`)**: `drawPoints`/`drawPointsRel`,
+    `drawLines`/`drawLinesRel`, `drawLineSegments`, `drawRectangles`,
+    `drawArcs`, `fillRectangles`, `fillChords`, `fillArcs`, and the six
+    `fillPolygon*` variants now scale their caller-supplied arrays via new
+    `scaledPoints`/`scaledRects`/`scaledArcs`/`scaledSegments` helpers
+    (allocated with `allocElms`, freed by the caller after the X11 call).
+    `FXArc`'s angle fields are left alone (already 1/64-degree units, not
+    pixels). This closes out item 1 above — `FXDCWindow`'s X11 drawing
+    surface is now fully scale-aware except for icon/image pixel content.
+  - **`FXWindow::reparent` checked, needs no change**: `XReparentWindow` is
+    always called at `(0,0)` relative to the new parent; actual position is
+    established by a separate, already-scaled `position()`/`move()` call.
+    Item 3 above turned out to be a non-issue.
+  - **Systematic input/event translation (commit `e80d513`)**: KeyPress/
+    KeyRelease and EnterNotify/LeaveNotify now unscale like Motion/Button
+    events already did. More significantly, found that
+    `FXWindow::translateCoordinatesFrom/To` — used on *every* mouse
+    motion/button event while a grab is active (dragging a scrollbar,
+    slider, splitter, ...) — go through a real `XTranslateCoordinates` call
+    on physical X windows, not pure logical arithmetic as assumed; fixed,
+    along with `getCursorPosition`/`setCursorPosition`
+    (`XQueryPointer`/`XWarpPointer`) and `FXApp::findWindowAt`. XDND is a
+    wire protocol shared with other, possibly unscaled, applications: the
+    position/rectangle sent in `XdndPosition`/`XdndStatus` (both send and
+    receive sides, in `FXWindow::handleDrag` and
+    `FXApp::dispatchEvent`) now convert between real screen pixels on the
+    wire and our internal logical convention. This closes out item 4 above.
+  - **Tested beyond Pathfinder (this round)**: `tests/iconlist` (scrolled
+    list — exercises the clip-rect fix directly), `tests/table` (grid lines,
+    stipple hatch fill, cell-selection border, spanning cells — exercises
+    most of the scalar/array primitive work), `tests/dialog` (buttons,
+    separators), `tests/tabbook` (tabs, borders). All render correctly at
+    scale=2; `tests/table` also verified at scale=3. This closes out item 5
+    above (broad-enough coverage for now; still worth trying more apps as
+    they come up).
+  - **Still open in Phase 2**: icon/image pixel content isn't resampled —
+    `FXImage`/`FXBitmap`/`FXIcon` need a nearest-neighbor upscale path.
+    Investigated this round: the clean approach is temporarily swapping in
+    an NxN-duplicated pixel buffer (and scaled width/height) right before
+    `FXImage::render()`/`FXBitmap::render()` run, so the existing ~20
+    format-specific renderers need no changes and XShm sizing stays
+    correct automatically — but `FXIcon`'s `shape`/`etch` masks (separate
+    `FXBitmap`-like objects that must stay pixel-aligned with the main
+    image) need the same treatment, and `FXBitmap`'s pixel data is bit-packed
+    (unlike `FXImage`'s `FXColor*`), adding real risk of subtle
+    stride/alignment bugs across three files I've only partially explored.
+    Deferred pending focused attention rather than rushed.
   - **Glyph-size scaling needs redoing**: a font that renders bigger without
     lying about its logical metrics — e.g. a second, physically-scaled
     `XftFont` used only for drawing, while the font object's metric-query

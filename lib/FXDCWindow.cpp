@@ -1719,6 +1719,22 @@ void FXDCWindow::clipChildren(FXbool yes){
 #else
 
 
+// Prototype: rect/clip are kept in *logical* pixels everywhere in this file
+// (they're derived from FXDrawable::getWidth/getHeight, which stay logical --
+// see PLAN.md, Phase 1/2), but X11/Xft clip calls need physical pixels. This
+// converts once at each call site rather than changing what rect/clip store,
+// since other code (e.g. drawIcon's `clip*FXRectangle(...)` intersection)
+// relies on them staying logical.
+static XRectangle scaledClipRect(const FXRectangle& r,FXint scale){
+  XRectangle x;
+  x.x=(short)(r.x*scale);
+  x.y=(short)(r.y*scale);
+  x.width=(unsigned short)(r.w*scale);
+  x.height=(unsigned short)(r.h*scale);
+  return x;
+  }
+
+
 // Construct for expose event painting
 FXDCWindow::FXDCWindow(FXDrawable* draw,FXEvent* event):FXDC(draw->getApp()),surface(nullptr),rect(0,0,0,0),devfg(0),devbg(0){
 #ifdef HAVE_XFT_H
@@ -1729,10 +1745,13 @@ FXDCWindow::FXDCWindow(FXDrawable* draw,FXEvent* event):FXDC(draw->getApp()),sur
   rect.y=clip.y=event->rect.y;
   rect.w=clip.w=event->rect.w;
   rect.h=clip.h=event->rect.h;
-  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted);
+  {
+  XRectangle sc=scaledClipRect(clip,getApp()->getScale());
+  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted);
 #ifdef HAVE_XFT_H
-  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,(XRectangle*)(void*)&clip,1);
+  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,&sc,1);
 #endif
+  }
   flags|=GCClipMask;
   }
 
@@ -1828,7 +1847,8 @@ FXColor FXDCWindow::readPixel(FXint x,FXint y){
 // Draw point
 void FXDCWindow::drawPoint(FXint x,FXint y){
   if(!surface){ fxerror("FXDCWindow::drawPoint: DC not connected to drawable.\n"); }
-  XDrawPoint((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y);
+  FXint scale=getApp()->getScale();
+  XDrawPoint((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale);
   }
 
 
@@ -1849,7 +1869,8 @@ void FXDCWindow::drawPointsRel(const FXPoint* points,FXuint npoints){
 // Draw line
 void FXDCWindow::drawLine(FXint x1,FXint y1,FXint x2,FXint y2){
   if(!surface){ fxerror("FXDCWindow::drawLine: DC not connected to drawable.\n"); }
-  XDrawLine((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x1,y1,x2,y2);
+  FXint scale=getApp()->getScale();
+  XDrawLine((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x1*scale,y1*scale,x2*scale,y2*scale);
   }
 
 
@@ -1877,7 +1898,8 @@ void FXDCWindow::drawLineSegments(const FXSegment* segments,FXuint nsegments){
 // Draw rectangle
 void FXDCWindow::drawRectangle(FXint x,FXint y,FXint w,FXint h){
   if(!surface){ fxerror("FXDCWindow::drawRectangle: DC not connected to drawable.\n"); }
-  XDrawRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h);
+  FXint scale=getApp()->getScale();
+  XDrawRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale);
   }
 
 
@@ -1891,7 +1913,9 @@ void FXDCWindow::drawRectangles(const FXRectangle* rectangles,FXuint nrectangles
 // Draw round rectangle
 void FXDCWindow::drawRoundRectangle(FXint x,FXint y,FXint w,FXint h,FXint ew,FXint eh){
   XArc arcs[4]; XSegment segs[4]; XGCValues gcv;
+  FXint scale=getApp()->getScale();
   if(!surface){ fxerror("FXDCWindow::drawRoundRectangle: DC not connected to drawable.\n"); }
+  x*=scale; y*=scale; w*=scale; h*=scale; ew*=scale; eh*=scale;
   if(ew+ew>w) ew=w>>1;
   if(eh+eh>h) eh=h>>1;
   arcs[0].x=arcs[2].x=x;
@@ -1928,7 +1952,8 @@ void FXDCWindow::drawRoundRectangle(FXint x,FXint y,FXint w,FXint h,FXint ew,FXi
 // Draw arc
 void FXDCWindow::drawArc(FXint x,FXint y,FXint w,FXint h,FXint ang1,FXint ang2){
   if(!surface){ fxerror("FXDCWindow::drawArc: DC not connected to drawable.\n"); }
-  XDrawArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h,ang1,ang2);
+  FXint scale=getApp()->getScale();
+  XDrawArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale,ang1,ang2);
   }
 
 
@@ -1942,7 +1967,8 @@ void FXDCWindow::drawArcs(const FXArc* arcs,FXuint narcs){
 // Draw ellipse
 void FXDCWindow::drawEllipse(FXint x,FXint y,FXint w,FXint h){
   if(!surface){ fxerror("FXDCWindow::drawEllipse: DC not connected to drawable.\n"); }
-  XDrawArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h,0,23040);
+  FXint scale=getApp()->getScale();
+  XDrawArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale,0,23040);
   }
 
 
@@ -1965,7 +1991,9 @@ void FXDCWindow::fillRectangles(const FXRectangle* rectangles,FXuint nrectangles
 // Fill rounded rectangle
 void FXDCWindow::fillRoundRectangle(FXint x,FXint y,FXint w,FXint h,FXint ew,FXint eh){
   XArc arcs[4]; XRectangle recs[3];
+  FXint scale=getApp()->getScale();
   if(!surface){ fxerror("FXDCWindow::fillRoundRectangle: DC not connected to drawable.\n"); }
+  x*=scale; y*=scale; w*=scale; h*=scale; ew*=scale; eh*=scale;
   if(ew+ew>w) ew=w>>1;
   if(eh+eh>h) eh=h>>1;
   arcs[0].x=arcs[2].x=x;
@@ -1999,8 +2027,9 @@ void FXDCWindow::fillRoundRectangle(FXint x,FXint y,FXint w,FXint h,FXint ew,FXi
 // Fill chord
 void FXDCWindow::fillChord(FXint x,FXint y,FXint w,FXint h,FXint ang1,FXint ang2){
   if(!surface){ fxerror("FXDCWindow::fillChord: DC not connected to drawable.\n"); }
+  FXint scale=getApp()->getScale();
   XSetArcMode((Display*)getApp()->getDisplay(),(GC)ctx,ArcChord);
-  XFillArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h,ang1,ang2);
+  XFillArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale,ang1,ang2);
   XSetArcMode((Display*)getApp()->getDisplay(),(GC)ctx,ArcPieSlice);
   }
 
@@ -2017,7 +2046,8 @@ void FXDCWindow::fillChords(const FXArc* chords,FXuint nchords){
 // Fill arc
 void FXDCWindow::fillArc(FXint x,FXint y,FXint w,FXint h,FXint ang1,FXint ang2){
   if(!surface){ fxerror("FXDCWindow::fillArc: DC not connected to drawable.\n"); }
-  XFillArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h,ang1,ang2);
+  FXint scale=getApp()->getScale();
+  XFillArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale,ang1,ang2);
   }
 
 
@@ -2031,7 +2061,8 @@ void FXDCWindow::fillArcs(const FXArc* arcs,FXuint narcs){
 // Fill ellipse
 void FXDCWindow::fillEllipse(FXint x,FXint y,FXint w,FXint h){
   if(!surface){ fxerror("FXDCWindow::fillEllipse: DC not connected to drawable.\n"); }
-  XFillArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h,0,23040);
+  FXint scale=getApp()->getScale();
+  XFillArc((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale,0,23040);
   }
 
 
@@ -2410,7 +2441,12 @@ void FXDCWindow::drawImageText(FXint x,FXint y,const FXString& string){
 void FXDCWindow::drawArea(const FXDrawable* source,FXint sx,FXint sy,FXint sw,FXint sh,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawArea: DC not connected to drawable.\n"); }
   if(!source || !source->id()){ fxerror("FXDCWindow::drawArea: illegal source specified.\n"); }
-  XCopyArea((Display*)getApp()->getDisplay(),source->id(),surface->id(),(GC)ctx,sx,sy,sw,sh,dx,dy);
+  // Prototype: destination position is logical, scaled to physical (see
+  // PLAN.md, Phase 1/2); source rect addresses the source drawable's own
+  // pixels, which aren't resampled yet (Phase 2 item 4), so sx/sy/sw/sh
+  // stay as-is.
+  FXint scale=getApp()->getScale();
+  XCopyArea((Display*)getApp()->getDisplay(),source->id(),surface->id(),(GC)ctx,sx,sy,sw,sh,dx*scale,dy*scale);
   }
 
 
@@ -2419,6 +2455,12 @@ void FXDCWindow::drawArea(const FXDrawable* source,FXint sx,FXint sy,FXint sw,FX
   FXint i,j,x,y,xs,ys;
   if(!surface){ fxerror("FXDCWindow::drawArea: DC not connected to drawable.\n"); }
   if(!source || !source->id()){ fxerror("FXDCWindow::drawArea: illegal source specified.\n"); }
+  // Prototype: dx/dy/dw/dh are logical, scaled to physical (see PLAN.md,
+  // Phase 1/2); source rect stays as-is (see unstretched overload above).
+  {
+  FXint scale=getApp()->getScale();
+  dx*=scale; dy*=scale; dw*=scale; dh*=scale;
+  }
   xs=(sw<<16)/dw;
   ys=(sh<<16)/dh;
   i=0;
@@ -2441,7 +2483,11 @@ void FXDCWindow::drawArea(const FXDrawable* source,FXint sx,FXint sy,FXint sw,FX
 void FXDCWindow::drawImage(const FXImage* image,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawImage: DC not connected to drawable.\n"); }
   if(!image || !image->id()){ fxerror("FXDCWindow::drawImage: illegal image specified.\n"); }
-  XCopyArea((Display*)getApp()->getDisplay(),image->id(),surface->id(),(GC)ctx,0,0,image->width,image->height,dx,dy);
+  // Prototype: position logical, scaled to physical; the image's own pixels
+  // aren't resampled yet, so it still draws at its native size (see
+  // PLAN.md, Phase 2 item 4).
+  FXint scale=getApp()->getScale();
+  XCopyArea((Display*)getApp()->getDisplay(),image->id(),surface->id(),(GC)ctx,0,0,image->width,image->height,dx*scale,dy*scale);
   }
 
 
@@ -2449,7 +2495,8 @@ void FXDCWindow::drawImage(const FXImage* image,FXint dx,FXint dy){
 void FXDCWindow::drawBitmap(const FXBitmap* bitmap,FXint dx,FXint dy) {
   if(!surface) fxerror("FXDCWindow::drawBitmap: DC not connected to drawable.\n");
   if(!bitmap || !bitmap->id()) fxerror("FXDCWindow::drawBitmap: illegal bitmap specified.\n");
-  XCopyPlane((Display*)getApp()->getDisplay(),bitmap->id(),surface->id(),(GC)ctx,0,0,bitmap->width,bitmap->height,dx,dy,1);
+  FXint scale=getApp()->getScale();
+  XCopyPlane((Display*)getApp()->getDisplay(),bitmap->id(),surface->id(),(GC)ctx,0,0,bitmap->width,bitmap->height,dx*scale,dy*scale,1);
   }
 
 
@@ -2457,19 +2504,28 @@ void FXDCWindow::drawBitmap(const FXBitmap* bitmap,FXint dx,FXint dy) {
 void FXDCWindow::drawIcon(const FXIcon* icon,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawIcon: DC not connected to drawable.\n"); }
   if(!icon || !icon->id() || !icon->shape){ fxerror("FXDCWindow::drawIcon: illegal icon specified.\n"); }
+  // Prototype: d.x/d.y/dx/dy/clip are all logical; d.w/d.h and the
+  // d.x-dx/d.y-dy source offset stay logical too since they index into the
+  // icon's own (not yet resampled) pixels -- only the final device position
+  // and clip get scaled to physical (see PLAN.md, Phase 2 item 4 for the
+  // still-open icon resampling work).
+  FXint scale=getApp()->getScale();
   FXRectangle d=clip*FXRectangle(dx,dy,icon->width,icon->height);
   if(d.w>0 && d.h>0){
     if(icon->getOptions()&IMAGE_OPAQUE){
-      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x,d.y);
+      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x*scale,d.y*scale);
       }
     else{
       XGCValues gcv;
       gcv.clip_mask=icon->shape;
-      gcv.clip_x_origin=dx;
-      gcv.clip_y_origin=dy;
+      gcv.clip_x_origin=dx*scale;
+      gcv.clip_y_origin=dy*scale;
       XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
-      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x,d.y);
-      XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted); // Restore old clip rectangle
+      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x*scale,d.y*scale);
+      {
+      XRectangle sc=scaledClipRect(clip,scale);
+      XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted); // Restore old clip rectangle
+      }
       flags|=GCClipMask;
       }
     }
@@ -2480,28 +2536,34 @@ void FXDCWindow::drawIcon(const FXIcon* icon,FXint dx,FXint dy){
 void FXDCWindow::drawIconShaded(const FXIcon* icon,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawIconShaded: DC not connected to drawable.\n"); }
   if(!icon || !icon->id() || !icon->shape){ fxerror("FXDCWindow::drawIconShaded: illegal icon specified.\n"); }
+  // Prototype: see drawIcon() above -- d.w/d.h and source offsets stay
+  // logical (icon isn't resampled yet), only device position/clip scale.
+  FXint scale=getApp()->getScale();
   FXRectangle d=clip*FXRectangle(dx,dy,icon->width,icon->height);
   if(d.w>0 && d.h>0){
     XGCValues gcv;
     gcv.clip_mask=icon->shape;
-    gcv.clip_x_origin=dx;
-    gcv.clip_y_origin=dy;
+    gcv.clip_x_origin=dx*scale;
+    gcv.clip_y_origin=dy*scale;
     XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
-    XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x,d.y);
+    XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x*scale,d.y*scale);
     gcv.function=BLT_SRC;
     gcv.stipple=getApp()->stipples[STIPPLE_GRAY];
     gcv.fill_style=FILL_STIPPLED;
-    gcv.ts_x_origin=dx;
-    gcv.ts_y_origin=dy;
+    gcv.ts_x_origin=dx*scale;
+    gcv.ts_y_origin=dy*scale;
     gcv.foreground=surface->visual->getPixel(getApp()->getSelbackColor());
     XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction|GCTileStipXOrigin|GCTileStipYOrigin|GCStipple|GCFillStyle,&gcv);
-    XFillRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,d.x,d.y,d.w,d.h);
+    XFillRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,d.x*scale,d.y*scale,d.w,d.h);
     gcv.function=rop;
     gcv.fill_style=fill;
-    gcv.ts_x_origin=tx;
-    gcv.ts_y_origin=ty;
+    gcv.ts_x_origin=tx*scale;
+    gcv.ts_y_origin=ty*scale;
     XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCTileStipXOrigin|GCTileStipYOrigin|GCFunction|GCFillStyle,&gcv);  // Restore old raster op function and fill style
-    XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted); // Restore old clip rectangle
+    {
+    XRectangle sc=scaledClipRect(clip,scale);
+    XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted); // Restore old clip rectangle
+    }
     flags|=GCClipMask;
     }
   }
@@ -2511,6 +2573,11 @@ void FXDCWindow::drawIconShaded(const FXIcon* icon,FXint dx,FXint dy){
 void FXDCWindow::drawIconSunken(const FXIcon* icon,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawIconSunken: DC not connected to drawable.\n"); }
   if(!icon || !icon->id() || !icon->etch){ fxerror("FXDCWindow::drawIconSunken: illegal icon specified.\n"); }
+  // Prototype: dx/dy scaled to physical; icon->width/height and the 1px
+  // etch offset stay native (icon isn't resampled yet -- PLAN.md Phase 2
+  // item 4).
+  FXint scale=getApp()->getScale();
+  FXint pdx=dx*scale, pdy=dy*scale;
   XGCValues gcv;
   FXColor base=getApp()->getBaseColor();
   FXColor clr=FXRGB((85*FXREDVAL(base))/100,(85*FXGREENVAL(base))/100,(85*FXBLUEVAL(base))/100);
@@ -2520,25 +2587,25 @@ void FXDCWindow::drawIconSunken(const FXIcon* icon,FXint dx,FXint dy){
   gcv.foreground=0xffffffff;
   gcv.function=BLT_NOT_SRC_AND_DST;
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCBackground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,dx+1,dy+1,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx+1,pdy+1,1);
 
   // Paint highlight part
   gcv.function=BLT_SRC_OR_DST;
   gcv.foreground=surface->visual->getPixel(getApp()->getHiliteColor());
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,dx+1,dy+1,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx+1,pdy+1,1);
 
   // Erase to black
   gcv.foreground=0xffffffff;
   gcv.function=BLT_NOT_SRC_AND_DST;
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,dx,dy,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx,pdy,1);
 
   // Paint shadow part
   gcv.function=BLT_SRC_OR_DST;
   gcv.foreground=surface->visual->getPixel(clr);
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,dx,dy,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx,pdy,1);
 
   // Restore stuff
   gcv.foreground=devfg;
@@ -2552,6 +2619,13 @@ void FXDCWindow::drawIconSunken(const FXIcon* icon,FXint dx,FXint dy){
 void FXDCWindow::drawHashBox(FXint x,FXint y,FXint w,FXint h,FXint b){
   XGCValues gcv;
   if(!surface){ fxerror("FXDCWindow::drawHashBox: DC not connected to drawable.\n"); }
+  // Prototype: scale logical geometry (including border thickness `b`) to
+  // physical pixels (see PLAN.md, Phase 2) -- this bypasses the already-
+  // scaled fillRectangle(), calling XFillRectangle directly.
+  {
+  FXint scale=getApp()->getScale();
+  x*=scale; y*=scale; w*=scale; h*=scale; b*=scale;
+  }
   gcv.stipple=getApp()->stipples[STIPPLE_GRAY];
   gcv.fill_style=FILL_STIPPLED;
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCStipple|GCFillStyle,&gcv);
@@ -2569,6 +2643,12 @@ void FXDCWindow::drawHashBox(FXint x,FXint y,FXint w,FXint h,FXint b){
 void FXDCWindow::drawFocusRectangle(FXint x,FXint y,FXint w,FXint h){
   XGCValues gcv;
   if(!surface){ fxerror("FXDCWindow::drawFocusRectangle: DC not connected to drawable.\n"); }
+  // Prototype: scale the rectangle bounds; the dashed border itself stays a
+  // 1-physical-pixel hairline at any scale, matching the usual look of a
+  // focus indicator rather than growing into a chunky Nx border (see
+  // PLAN.md, Phase 2).
+  FXint scale=getApp()->getScale();
+  x*=scale; y*=scale; w*=scale; h*=scale;
   gcv.stipple=getApp()->stipples[STIPPLE_GRAY];
   gcv.fill_style=FILL_STIPPLED;
   gcv.background=0;
@@ -2586,8 +2666,8 @@ void FXDCWindow::drawFocusRectangle(FXint x,FXint y,FXint w,FXint h){
   gcv.background=devbg;
   gcv.foreground=devfg;
   gcv.function=rop;
-  gcv.ts_x_origin=tx;
-  gcv.ts_y_origin=ty;
+  gcv.ts_x_origin=tx*scale;
+  gcv.ts_y_origin=ty*scale;
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCTileStipXOrigin|GCTileStipYOrigin|GCForeground|GCBackground|GCFunction|GCStipple|GCFillStyle,&gcv);
   }
 
@@ -2632,7 +2712,9 @@ void FXDCWindow::setDashes(FXuint dashoffset,const FXuchar *dashpattern,FXuint d
 void FXDCWindow::setLineWidth(FXuint linewidth){
   XGCValues gcv;
   if(!surface){ fxerror("FXDCWindow::setLineWidth: DC not connected to drawable.\n"); }
-  gcv.line_width=linewidth;
+  // Prototype: 1px border -> Nx px (see PLAN.md); 0 (X11's fast hairline
+  // mode) scales to 0*scale=0, still hairline, so no special-case needed.
+  gcv.line_width=linewidth*getApp()->getScale();
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCLineWidth,&gcv);
   flags|=GCLineWidth;
   width=linewidth;
@@ -2704,9 +2786,11 @@ void FXDCWindow::setTile(FXImage* image,FXint dx,FXint dy){
   XGCValues gcv;
   if(!surface){ fxerror("FXDCWindow::setTile: DC not connected to drawable.\n"); }
   if(!image || !image->id()){ fxerror("FXDCWindow::setTile: illegal image specified.\n"); }
+  // Prototype: tx/ty (and dx/dy here) stay logical, like clip/rect; scale
+  // only for the X11 call (see PLAN.md, Phase 2).
   gcv.tile=image->id();
-  gcv.ts_x_origin=dx;
-  gcv.ts_y_origin=dy;
+  gcv.ts_x_origin=dx*getApp()->getScale();
+  gcv.ts_y_origin=dy*getApp()->getScale();
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCTileStipXOrigin|GCTileStipYOrigin|GCTile,&gcv);
   if(dx) flags|=GCTileStipXOrigin;
   if(dy) flags|=GCTileStipYOrigin;
@@ -2722,8 +2806,8 @@ void FXDCWindow::setStipple(FXBitmap* bitmap,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::setStipple: DC not connected to drawable.\n"); }
   if(!bitmap || !bitmap->id()){ fxerror("FXDCWindow::setStipple: illegal image specified.\n"); }
   gcv.stipple=bitmap->id();
-  gcv.ts_x_origin=dx;
-  gcv.ts_y_origin=dy;
+  gcv.ts_x_origin=dx*getApp()->getScale();
+  gcv.ts_y_origin=dy*getApp()->getScale();
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCTileStipXOrigin|GCTileStipYOrigin|GCStipple,&gcv);
   if(dx) flags|=GCTileStipXOrigin;
   if(dy) flags|=GCTileStipYOrigin;
@@ -2742,8 +2826,8 @@ void FXDCWindow::setStipple(FXStipplePattern pat,FXint dx,FXint dy){
   if(pat>STIPPLE_CROSSDIAG) pat=STIPPLE_CROSSDIAG;
   FXASSERT(getApp()->stipples[pat]);
   gcv.stipple=getApp()->stipples[pat];
-  gcv.ts_x_origin=dx;
-  gcv.ts_y_origin=dy;
+  gcv.ts_x_origin=dx*getApp()->getScale();
+  gcv.ts_y_origin=dy*getApp()->getScale();
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCTileStipXOrigin|GCTileStipYOrigin|GCStipple,&gcv);
   if(dx) flags|=GCTileStipXOrigin;
   if(dy) flags|=GCTileStipYOrigin;
@@ -2775,10 +2859,15 @@ void FXDCWindow::setClipRectangle(FXint x,FXint y,FXint w,FXint h){
   clip.h=FXMIN(y+h,rect.y+rect.h)-clip.y;
   if(clip.w<=0) clip.w=0;
   if(clip.h<=0) clip.h=0;
-  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted);
+  // Prototype: clip stays logical (see scaledClipRect() above); scale only
+  // for the X11/Xft calls (see PLAN.md, Phase 2).
+  {
+  XRectangle sc=scaledClipRect(clip,getApp()->getScale());
+  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted);
 #ifdef HAVE_XFT_H
-  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,(XRectangle*)(void*)&clip,1);
+  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,&sc,1);
 #endif
+  }
   flags|=GCClipMask;
   }
 
@@ -2792,10 +2881,13 @@ void FXDCWindow::setClipRectangle(const FXRectangle& rectangle){
   clip.h=FXMIN(rectangle.y+rectangle.h,rect.y+rect.h)-clip.y;
   if(clip.w<=0) clip.w=0;
   if(clip.h<=0) clip.h=0;
-  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted);
+  {
+  XRectangle sc=scaledClipRect(clip,getApp()->getScale());
+  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted);
 #ifdef HAVE_XFT_H
-  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,(XRectangle*)(void*)&clip,1);
+  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,&sc,1);
 #endif
+  }
   flags|=GCClipMask;
   }
 
@@ -2804,10 +2896,13 @@ void FXDCWindow::setClipRectangle(const FXRectangle& rectangle){
 void FXDCWindow::clearClipRectangle(){
   if(!surface){ fxerror("FXDCWindow::clearClipRectangle: DC not connected to drawable.\n"); }
   clip=rect;
-  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted);
+  {
+  XRectangle sc=scaledClipRect(clip,getApp()->getScale());
+  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted);
 #ifdef HAVE_XFT_H
-  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,(XRectangle*)(void*)&clip,1);
+  XftDrawSetClipRectangles((XftDraw*)xftDraw,0,0,&sc,1);
 #endif
+  }
   flags|=GCClipMask;
   }
 
@@ -2818,8 +2913,8 @@ void FXDCWindow::setClipMask(FXBitmap* bitmap,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::setClipMask: DC not connected to drawable.\n"); }
   if(!bitmap || !bitmap->id()){ fxerror("FXDCWindow::setClipMask: illegal mask specified.\n"); }
   gcv.clip_mask=bitmap->id();
-  gcv.clip_x_origin=dx;
-  gcv.clip_y_origin=dy;
+  gcv.clip_x_origin=dx*getApp()->getScale();
+  gcv.clip_y_origin=dy*getApp()->getScale();
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
   if(dx) flags|=GCClipXOrigin;
   if(dy) flags|=GCClipYOrigin;
@@ -2834,7 +2929,10 @@ void FXDCWindow::setClipMask(FXBitmap* bitmap,FXint dx,FXint dy){
 void FXDCWindow::clearClipMask(){
   if(!surface){ fxerror("FXDCWindow::clearClipMask: DC not connected to drawable.\n"); }
   clip=rect;
-  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,(XRectangle*)(void*)&clip,1,Unsorted);
+  {
+  XRectangle sc=scaledClipRect(clip,getApp()->getScale());
+  XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted);
+  }
   flags|=GCClipMask;
   mask=nullptr;
   cx=0;

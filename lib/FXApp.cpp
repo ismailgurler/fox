@@ -863,12 +863,16 @@ FXWindow* FXApp::findWindowAt(FXint rx,FXint ry,FXID window) const {
       window=child;
       }
 #else
+    // Prototype: rx/ry (root-relative) are logical, like every other
+    // findWindowAt() caller passes; scale for XTranslateCoordinates (see
+    // PLAN.md, Phase 2).
     Window rootwin=XDefaultRootWindow((Display*)display);
     Window child;
     int wx,wy;
+    int prx=rx*scale, pry=ry*scale;
     if(!window) window=rootwin;
     while(1){
-      if(!XTranslateCoordinates((Display*)display,rootwin,window,rx,ry,&wx,&wy,&child)) return nullptr;
+      if(!XTranslateCoordinates((Display*)display,rootwin,window,prx,pry,&wx,&wy,&child)) return nullptr;
       if(child==None) break;
       window=child;
       }
@@ -2890,10 +2894,10 @@ adjust the user interface as necessary.
         else if(ev.type==xsbButtonPress){
           event.type=SEL_SPACEBALLBUTTONPRESS;
           event.time=ev.xmotion.time;
-          event.win_x=ev.xmotion.x;
-          event.win_y=ev.xmotion.y;
-          event.root_x=ev.xmotion.x_root;
-          event.root_y=ev.xmotion.y_root;
+          event.win_x=ev.xmotion.x/scale;
+          event.win_y=ev.xmotion.y/scale;
+          event.root_x=ev.xmotion.x_root/scale;
+          event.root_y=ev.xmotion.y_root/scale;
 
           // Dispatch to grab window
           if(mouseGrabWindow){
@@ -2910,10 +2914,10 @@ adjust the user interface as necessary.
         else if(ev.type==xsbButtonRelease){
           event.type=SEL_SPACEBALLBUTTONRELEASE;
           event.time=ev.xmotion.time;
-          event.win_x=ev.xmotion.x;
-          event.win_y=ev.xmotion.y;
-          event.root_x=ev.xmotion.x_root;
-          event.root_y=ev.xmotion.y_root;
+          event.win_x=ev.xmotion.x/scale;
+          event.win_y=ev.xmotion.y/scale;
+          event.root_x=ev.xmotion.x_root/scale;
+          event.root_y=ev.xmotion.y_root/scale;
 
           // Dispatch to grab window
           if(mouseGrabWindow){
@@ -3085,10 +3089,11 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
       case KeyRelease:
         event.type=SEL_KEYPRESS+ev.xkey.type-KeyPress;
         event.time=ev.xkey.time;
-        event.win_x=ev.xkey.x;
-        event.win_y=ev.xkey.y;
-        event.root_x=ev.xkey.x_root;
-        event.root_y=ev.xkey.y_root;
+        // Prototype: unscale physical X11 coordinates back to logical (see PLAN.md, Phase 2)
+        event.win_x=ev.xkey.x/scale;
+        event.win_y=ev.xkey.y/scale;
+        event.root_x=ev.xkey.x_root/scale;
+        event.root_y=ev.xkey.y_root/scale;
 
         // Translate to keysym; must interpret modifiers!
         event.code=keysym(ev);
@@ -3307,8 +3312,8 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
         if(cursorWindow!=window){
           if(ev.xcrossing.mode==NotifyGrab || ev.xcrossing.mode==NotifyUngrab || (ev.xcrossing.mode==NotifyNormal && ev.xcrossing.detail!=NotifyInferior)){
             ancestor=FXWindow::commonAncestor(window,cursorWindow);
-            event.root_x=ev.xcrossing.x_root;
-            event.root_y=ev.xcrossing.y_root;
+            event.root_x=ev.xcrossing.x_root/scale;
+            event.root_y=ev.xcrossing.y_root/scale;
             event.code=ev.xcrossing.mode;
             leaveWindow(cursorWindow,ancestor);
             enterWindow(window,ancestor);
@@ -3321,8 +3326,8 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
         event.time=ev.xcrossing.time;
         if(cursorWindow==window){
           if(ev.xcrossing.mode==NotifyGrab || ev.xcrossing.mode==NotifyUngrab || (ev.xcrossing.mode==NotifyNormal && ev.xcrossing.detail!=NotifyInferior)){
-            event.root_x=ev.xcrossing.x_root;
-            event.root_y=ev.xcrossing.y_root;
+            event.root_x=ev.xcrossing.x_root/scale;
+            event.root_y=ev.xcrossing.y_root/scale;
             event.code=ev.xcrossing.mode;
             FXASSERT(cursorWindow==window);
             leaveWindow(window,window->getParent());
@@ -3611,8 +3616,11 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
         else if(ev.xclient.message_type==xdndPosition){
           if(xdndSource!=(FXID)ev.xclient.data.l[0]) return true;   // We're not talking to this guy
           event.time=ev.xclient.data.l[3];
-          event.root_x=((FXuint)ev.xclient.data.l[2])>>16;
-          event.root_y=((FXuint)ev.xclient.data.l[2])&0xffff;
+          // Prototype: XDND is a wire protocol -- coordinates from another
+          // (possibly unscaled) application are real screen pixels; unscale
+          // to our internal logical convention (see PLAN.md, Phase 2).
+          event.root_x=(((FXuint)ev.xclient.data.l[2])>>16)/scale;
+          event.root_y=(((FXuint)ev.xclient.data.l[2])&0xffff)/scale;
           // Search from target window down; there may be another window
           // (like e.g. the dragged shape window) right under the cursor.
           // Note this is the target window, not the proxy target....
@@ -3644,7 +3652,9 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
             }
           if(dropWindow){
             event.type=SEL_DND_MOTION;
-            XTranslateCoordinates((Display*)display,XDefaultRootWindow((Display*)display),dropWindow->id(),event.root_x,event.root_y,&event.win_x,&event.win_y,&tmp);
+            XTranslateCoordinates((Display*)display,XDefaultRootWindow((Display*)display),dropWindow->id(),event.root_x*scale,event.root_y*scale,&event.win_x,&event.win_y,&tmp);
+            event.win_x/=scale;
+            event.win_y/=scale;
             if(dropWindow->handle(this,FXSEL(SEL_DND_MOTION,0),&event)) refresh();
             event.last_x=event.win_x;
             event.last_y=event.win_y;
@@ -3658,8 +3668,10 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
           se.xclient.data.l[1]=0;
           if(ansAction!=DRAG_REJECT) se.xclient.data.l[1]|=1;           // Target accepted
           if(xdndWantUpdates) se.xclient.data.l[1]|=2;                  // Target wants continuous position updates
-          se.xclient.data.l[2]=MKUINT(xdndRect.y,xdndRect.x);
-          se.xclient.data.l[3]=MKUINT(xdndRect.h,xdndRect.w);
+          // Prototype: xdndRect is kept logical; scale back to real screen
+          // pixels for the wire reply (see PLAN.md, Phase 2).
+          se.xclient.data.l[2]=MKUINT(xdndRect.y*scale,xdndRect.x*scale);
+          se.xclient.data.l[3]=MKUINT(xdndRect.h*scale,xdndRect.w*scale);
           se.xclient.data.l[4]=xdndActionList[ansAction];               // Drag and Drop Action accepted
           XSendEvent((Display*)display,xdndSource,True,NoEventMask,&se);
           }
@@ -3712,10 +3724,12 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
             else if((FXID)ev.xclient.data.l[4]==xdndActionList[DRAG_PRIVATE]) ansAction=DRAG_PRIVATE;
             }
           xdndWantUpdates=ev.xclient.data.l[1]&2;
-          xdndRect.x=((FXuint)ev.xclient.data.l[2])>>16;
-          xdndRect.y=((FXuint)ev.xclient.data.l[2])&0xffff;
-          xdndRect.w=((FXuint)ev.xclient.data.l[3])>>16;
-          xdndRect.h=((FXuint)ev.xclient.data.l[3])&0xffff;
+          // Prototype: unscale real screen pixels from the wire back to our
+          // internal logical convention (see PLAN.md, Phase 2).
+          xdndRect.x=(((FXuint)ev.xclient.data.l[2])>>16)/scale;
+          xdndRect.y=(((FXuint)ev.xclient.data.l[2])&0xffff)/scale;
+          xdndRect.w=(((FXuint)ev.xclient.data.l[3])>>16)/scale;
+          xdndRect.h=(((FXuint)ev.xclient.data.l[3])&0xffff)/scale;
           xdndStatusReceived=true;
           xdndStatusPending=false;
           FXTRACE((100,"DNDStatus from remote window %ld action=%d rect=%d,%d,%d,%d updates=%d\n",ev.xclient.data.l[0],ansAction,xdndRect.x,xdndRect.y,xdndRect.w,xdndRect.h,xdndWantUpdates));

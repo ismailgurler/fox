@@ -2080,8 +2080,13 @@ FXbool FXWindow::getCursorPosition(FXint& x,FXint& y,FXuint& buttons) const {
     buttons=fxmodifierkeys();
     return true;
 #else
+    // Prototype: XQueryPointer reports physical pixels; unscale back to
+    // logical, matching every other input path (see PLAN.md, Phase 2).
     Window dum; int rx,ry;
-    return XQueryPointer((Display*)getApp()->getDisplay(),xid,&dum,&dum,&rx,&ry,&x,&y,&buttons);
+    FXbool ok=XQueryPointer((Display*)getApp()->getDisplay(),xid,&dum,&dum,&rx,&ry,&x,&y,&buttons);
+    x/=getApp()->getScale();
+    y/=getApp()->getScale();
+    return ok;
 #endif
     }
   return false;
@@ -2100,7 +2105,10 @@ FXbool FXWindow::setCursorPosition(FXint x,FXint y){
     SetCursorPos(pt.x,pt.y);
     return true;
 #else
-    XWarpPointer((Display*)getApp()->getDisplay(),None,xid,0,0,0,0,x,y);
+    // Prototype: x/y are logical (window coordinates); scale to physical
+    // for XWarpPointer (see PLAN.md, Phase 2).
+    FXint scale=getApp()->getScale();
+    XWarpPointer((Display*)getApp()->getDisplay(),None,xid,0,0,0,0,x*scale,y*scale);
     return true;
 #endif
     }
@@ -2665,8 +2673,13 @@ void FXWindow::translateCoordinatesFrom(FXint& tox,FXint& toy,const FXWindow* fr
     tox=pt.x;
     toy=pt.y;
 #else
+    // Prototype: fromx/fromy and tox/toy are logical; XTranslateCoordinates
+    // works on the real (physical) X windows (see PLAN.md, Phase 2).
     Window tmp;
-    XTranslateCoordinates((Display*)getApp()->getDisplay(),fromwindow->id(),xid,fromx,fromy,&tox,&toy,&tmp);
+    FXint scale=getApp()->getScale();
+    XTranslateCoordinates((Display*)getApp()->getDisplay(),fromwindow->id(),xid,fromx*scale,fromy*scale,&tox,&toy,&tmp);
+    tox/=scale;
+    toy/=scale;
 #endif
     }
   }
@@ -2685,8 +2698,12 @@ void FXWindow::translateCoordinatesTo(FXint& tox,FXint& toy,const FXWindow* towi
     tox=pt.x;
     toy=pt.y;
 #else
+    // Prototype: see translateCoordinatesFrom() above.
     Window tmp;
-    XTranslateCoordinates((Display*)getApp()->getDisplay(),xid,towindow->id(),fromx,fromy,&tox,&toy,&tmp);
+    FXint scale=getApp()->getScale();
+    XTranslateCoordinates((Display*)getApp()->getDisplay(),xid,towindow->id(),fromx*scale,fromy*scale,&tox,&toy,&tmp);
+    tox/=scale;
+    toy/=scale;
 #endif
     }
   }
@@ -2832,11 +2849,15 @@ void FXWindow::setDragRectangle(FXint x,FXint y,FXint w,FXint h,FXbool wantupdat
   getApp()->xdndRect.x=(short)pt.x;
   getApp()->xdndRect.y=(short)pt.y;
 #else
+  // Prototype: x/y are logical; xdndRect is kept logical too (matches the
+  // event.root_x/root_y it's later compared against), so scale only for the
+  // XTranslateCoordinates call itself (see PLAN.md, Phase 2).
   Window tmp;
   int tox,toy;
-  XTranslateCoordinates((Display*)getApp()->getDisplay(),xid,XDefaultRootWindow((Display*)getApp()->getDisplay()),x,y,&tox,&toy,&tmp);
-  getApp()->xdndRect.x=tox;
-  getApp()->xdndRect.y=toy;
+  FXint scale=getApp()->getScale();
+  XTranslateCoordinates((Display*)getApp()->getDisplay(),xid,XDefaultRootWindow((Display*)getApp()->getDisplay()),x*scale,y*scale,&tox,&toy,&tmp);
+  getApp()->xdndRect.x=tox/scale;
+  getApp()->xdndRect.y=toy/scale;
   getApp()->xdndWantUpdates=wantupdates;
 #endif
   getApp()->xdndRect.w=w;
@@ -3171,6 +3192,12 @@ FXbool FXWindow::handleDrag(FXint x,FXint y,FXDragAction action){
     XEvent  se;
     FXbool    forcepos=false;
 
+    // Prototype: x/y (root-relative) are logical; scale to physical for
+    // XTranslateCoordinates (see PLAN.md, Phase 2). dropx/dropy come back
+    // physical too -- unscaled below, right before they're used as logical
+    // event.win_x/win_y.
+    FXint scale=getApp()->getScale();
+
     // Find XDND aware window at the indicated location
     root=XDefaultRootWindow((Display*)getApp()->getDisplay());
     window=0;
@@ -3178,7 +3205,7 @@ FXbool FXWindow::handleDrag(FXint x,FXint y,FXDragAction action){
     version=0;
     win=root;
     while(1){
-      if(!XTranslateCoordinates((Display*)getApp()->getDisplay(),root,win,x,y,&dropx,&dropy,&child)) break;
+      if(!XTranslateCoordinates((Display*)getApp()->getDisplay(),root,win,x*scale,y*scale,&dropx,&dropy,&child)) break;
       proxywin=win;
       if(XGetWindowProperty((Display*)getApp()->getDisplay(),win,getApp()->xdndProxy,0,1,False,AnyPropertyType,&typ,&fmt,&ni,&ba,&ptr1)==Success){
         if(typ==XA_WINDOW && fmt==32 && ni>0){
@@ -3267,7 +3294,10 @@ FXbool FXWindow::handleDrag(FXint x,FXint y,FXDragAction action){
           se.xclient.window=getApp()->xdndTarget;
           se.xclient.data.l[0]=xid;
           se.xclient.data.l[1]=0;
-          se.xclient.data.l[2]=MKUINT(y,x);                               // Coordinates
+          // Prototype: XDND is a wire protocol shared with other
+          // applications, which know nothing of our internal scale
+          // convention -- send real screen pixels here (see PLAN.md, Phase 2).
+          se.xclient.data.l[2]=MKUINT(y*scale,x*scale);                   // Coordinates
           se.xclient.data.l[3]=getApp()->event.time;                      // Time stamp
           se.xclient.data.l[4]=getApp()->xdndActionList[action];
           XSendEvent((Display*)getApp()->getDisplay(),getApp()->xdndProxyTarget,True,NoEventMask,&se);

@@ -39,6 +39,7 @@
 #include "FXAccelTable.h"
 #include "FXVisual.h"
 #include "FXFont.h"
+#include "xfntface.h"
 #include "FXCursor.h"
 #include "FXEvent.h"
 #include "FXWindow.h"
@@ -2508,6 +2509,106 @@ static void drawBitmapText(Display* dpy,Drawable surfaceId,GC ctx,XFontStruct* f
   }
 
 
+// Prototype (Phase 3b): render text with a parsed .FON/.FNT bitmap face
+// (font->fntFace) as pixel-perfect NxN blocks. Unlike drawBitmapText()
+// above (which asks the X server to rasterize via XDrawString16, since it
+// has a real XFontStruct to hand it), there's no server-side font here --
+// glyph bits come straight out of FXFntFace::data, unpacked per the byte
+// layout documented on FXFntFace's definition (xfntface.h). Builds the
+// already-scaled destination bitmap in one pass (no separate "render at 1x
+// then scale" round trip needed, since we're unpacking bits by hand
+// anyway), then reuses the same clip-mask + fillRectangle blit as
+// drawBitmapText() for transparency (see PLAN.md, Phase 3b).
+static void drawFntText(Display* dpy,Drawable surfaceId,GC ctx,FXFntFace* face,FXint scale,FXint x,FXint y,const FXchar* string,FXuint length,const FXRectangle& clip){
+  FXint rows=face->pixHeight;
+  if(rows<=0) return;
+
+  // First pass: resolve each character to a glyph and total up the width.
+  // Bounded scratch array, same cap drawBitmapText() uses for its XChar2b buffer.
+  enum { MAXCHARS=4096 };
+  FXFntGlyph glyphrefs[MAXCHARS];
+  FXint nchars=0;
+  FXint totalw=0;
+  FXuint p=0;
+  while(p<length && nchars<MAXCHARS){
+    FXwchar w=wc(string+p);
+    p+=wclen(string+p);
+    FXint idx=(FXint)w-face->firstChar;
+    if(idx<0 || idx>face->lastChar-face->firstChar) idx=face->defaultChar-face->firstChar;
+    if(idx<0 || idx>face->lastChar-face->firstChar) continue;   // no usable glyph, not even .notdef
+    glyphrefs[nchars]=face->glyphs[idx];
+    totalw+=glyphrefs[nchars].width;
+    nchars++;
+    }
+  if(totalw<=0 || nchars==0) return;
+
+  FXint dstw=totalw*scale, dsth=rows*scale;
+  XImage* dstim=XCreateImage(dpy,DefaultVisual(dpy,DefaultScreen(dpy)),1,XYBitmap,0,nullptr,dstw,dsth,32,0);
+  if(!dstim || !allocElms(dstim->data,(FXival)dstim->bytes_per_line*dsth)){
+    if(dstim) XDestroyImage(dstim);
+    return;
+    }
+  memset(dstim->data,0,(FXival)dstim->bytes_per_line*dsth);
+
+  FXint curx=0;
+  for(FXint i=0; i<nchars; i++){
+    FXint gw=glyphrefs[i].width;
+    FXint pitch=(gw+7)/8;                       // byte-groups (8-pixel-wide bands) spanning this glyph
+    FXuint glyphbytes=(FXuint)pitch*rows;
+    if(gw>0 && (FXuint)glyphrefs[i].offset+glyphbytes<=face->datasize){
+      const FXuchar* gdata=face->data+glyphrefs[i].offset;
+      for(FXint gy=0; gy<rows; gy++){
+        for(FXint gx=0; gx<gw; gx++){
+          FXint bx=gx/8;
+          FXuchar b=gdata[(FXuint)bx*rows+gy];
+          FXint bit=7-(gx%8);
+          if((b>>bit)&1){
+            FXint px=(curx+gx)*scale;
+            FXint py=gy*scale;
+            for(FXint dy=0; dy<scale; dy++){
+              for(FXint dx=0; dx<scale; dx++){
+                XPutPixel(dstim,px+dx,py+dy,1);
+                }
+              }
+            }
+          }
+        }
+      }
+    curx+=gw;
+    }
+
+  // Upload as a stencil clip mask (see drawBitmapText()'s comment on why
+  // foreground=1/background=0 must be set explicitly here) and fill
+  // through it with the current foreground color -- transparent
+  // background, not an opaque box.
+  Pixmap maskbm=XCreatePixmap(dpy,surfaceId,dstw,dsth,1);
+  GC maskgc=XCreateGC(dpy,maskbm,0,nullptr);
+  XSetForeground(dpy,maskgc,1);
+  XSetBackground(dpy,maskgc,0);
+  XPutImage(dpy,maskbm,maskgc,dstim,0,0,0,0,dstw,dsth);
+  XFreeGC(dpy,maskgc);
+  freeElms(dstim->data);
+  dstim->data=nullptr;
+  XDestroyImage(dstim);
+
+  FXint destx=x, desty=y-face->ascent*scale;
+  XGCValues gcv;
+  gcv.clip_mask=maskbm;
+  gcv.clip_x_origin=destx;
+  gcv.clip_y_origin=desty;
+  XChangeGC(dpy,ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
+  XFillRectangle(dpy,surfaceId,ctx,destx,desty,dstw,dsth);
+
+  // Restore the DC's own (rectangle) clip
+  {
+  XRectangle sc=scaledClipRect(clip,scale);
+  XSetClipRectangles(dpy,ctx,0,0,&sc,1,Unsorted);
+  }
+
+  XFreePixmap(dpy,maskbm);
+  }
+
+
 // Draw string with base line starting at x, y
 void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   if(!surface){ fxerror("FXDCWindow::drawText: DC not connected to drawable.\n"); }
@@ -2519,6 +2620,13 @@ void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   // metrics (getFontHeight/getTextWidth, used throughout layout) lying
   // about being logical (see PLAN.md, Phase 2 item 5).
   FXint scale=getApp()->getScale();
+  // Prototype (Phase 3b): a parsed .FON/.FNT face takes over entirely --
+  // pixel-perfect NxN blocks, no antialiasing.
+  if(font->fntFace){
+    drawFntText((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,(FXFntFace*)font->fntFace,scale,x*scale,y*scale,string,length,clip);
+    flags|=GCClipMask;
+    return;
+    }
   // Prototype (Phase 3): a genuine X11 core bitmap font takes over
   // entirely -- pixel-perfect NxN blocks, no antialiasing.
   if(font->bitmapFont){

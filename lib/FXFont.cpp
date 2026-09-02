@@ -39,7 +39,10 @@
 #include "FXStringDictionary.h"
 #include "FXSettings.h"
 #include "FXRegistry.h"
+#include "FXIODevice.h"
+#include "FXFile.h"
 #include "FXFont.h"
+#include "xfntface.h"
 #include "FXEvent.h"
 #include "FXWindow.h"
 #include "FXDCWindow.h"
@@ -583,6 +586,186 @@ static FXString xlfdFont(Display *dpy,const FXString& font){
   }
 
 
+/*******************************************************************************/
+
+// Prototype (Phase 3b): a genuine Windows .FON/.FNT bitmap font, parsed
+// directly from disk -- an alternative bitmap font source to bitmapFont
+// (X11 core fonts loaded by name); used when wantedName is a path ending
+// in .fon/.FON. FXFntGlyph/FXFntFace are defined in xfntface.h, shared with
+// FXDCWindow.cpp's renderer. See PLAN.md, Phase 3.
+//
+// Byte layout confirmed against FreeType's src/winfonts/winfnt.c (the
+// authoritative implementation) and cross-checked by rendering actual
+// glyphs from a real MS Sans Serif .fon downloaded for this purpose: a
+// glyph's bitmap is stored in horizontal 8-pixel-wide bands, left to
+// right; within a band, one byte per row, top to bottom (i.e. NOT the
+// naive "column of ceil(height/8) bytes" layout one might guess from "font
+// glyphs are stored in columns" -- that phrase refers to 8-pixel bands,
+// not individual pixel columns).
+
+
+// Read a little-endian value of WType (FXushort/FXuint) at byte offset o; false if out of bounds
+template<typename WType>
+static FXbool fntGet(const FXuchar* data,FXuint size,FXuint o,WType& out){
+  if((FXuint)(o+sizeof(WType))>size) return false;
+  out=0;
+  for(FXuint i=0; i<sizeof(WType); i++){ out|=((WType)data[o+i])<<(8*i); }
+  return true;
+  }
+
+
+// Parse one FNT resource blob (already known to start with dfVersion) into a
+// fresh FXFntFace, or nullptr if it doesn't look like a valid bitmap FNT
+// (e.g. a vector/stroke font, which this prototype doesn't support).
+static FXFntFace* fntParseResource(const FXuchar* res,FXuint reslen){
+  FXushort version=0;
+  if(!fntGet(res,reslen,0x00,version)) return nullptr;
+  if(version!=0x0200 && version!=0x0300) return nullptr;   // only classic bitmap FNT versions
+
+  FXuchar type=0;
+  if(0x42+2>reslen) return nullptr;
+  fntGet(res,reslen,0x42,type);
+  if(type&0x01) return nullptr;                            // bit 0 set = vector font, not bitmap
+
+  FXushort pixHeight=0,ascent=0,avgWidth=0,maxWidth=0;
+  FXuchar firstChar=0,lastChar=0,defaultChar=0;
+  fntGet(res,reslen,0x4A,ascent);
+  fntGet(res,reslen,0x58,pixHeight);
+  fntGet(res,reslen,0x5B,avgWidth);
+  fntGet(res,reslen,0x5D,maxWidth);
+  if(0x5F+4>reslen) return nullptr;
+  firstChar=res[0x5F];
+  lastChar=res[0x60];
+  defaultChar=res[0x61];
+  if(lastChar<firstChar || pixHeight==0) return nullptr;
+
+  FXbool newformat=(version==0x0300);
+  FXuint hdrsize=newformat?0x94:0x76;
+  FXuint entrysize=newformat?6:4;
+  FXint numChars=lastChar-firstChar+1;
+
+  FXFntFace* face;
+  if(!allocElms(face,1)) return nullptr;
+  face->data=nullptr;
+  face->datasize=reslen;
+  face->glyphs=nullptr;
+  face->firstChar=firstChar;
+  face->lastChar=lastChar;
+  face->defaultChar=defaultChar;
+  face->pixHeight=pixHeight;
+  face->ascent=ascent;
+  face->maxWidth=maxWidth;
+  face->avgWidth=avgWidth;
+
+  if(!allocElms(face->glyphs,numChars) || !allocElms(face->data,reslen)){
+    freeElms(face->glyphs);
+    freeElms(face->data);
+    freeElms(face);
+    return nullptr;
+    }
+  memcpy(face->data,res,reslen);
+
+  FXuint p=hdrsize;
+  for(FXint i=0; i<numChars; i++){
+    FXushort w=0;
+    FXuint o=0;
+    FXbool ok;
+    if(newformat){
+      FXuint o32=0;
+      ok=fntGet(res,reslen,p,w) && fntGet(res,reslen,p+2,o32);
+      o=o32;
+      }
+    else{
+      FXushort o16=0;
+      ok=fntGet(res,reslen,p,w) && fntGet(res,reslen,p+2,o16);
+      o=o16;
+      }
+    if(!ok){ freeElms(face->glyphs); freeElms(face->data); freeElms(face); return nullptr; }
+    face->glyphs[i].width=w;
+    face->glyphs[i].offset=o;
+    p+=entrysize;
+    }
+  return face;
+  }
+
+
+// Load a .FON file, picking the embedded FNT resource whose point size is
+// closest to wantedPoints (0 = just take the first one). Returns nullptr if
+// the file isn't a valid NE-format .FON, has no bitmap FONT resources, or
+// can't be read.
+static FXFntFace* fntLoad(const FXString& path,FXint wantedPoints){
+  FXFile file(path,FXIO::Reading);
+  if(!file.isOpen()) return nullptr;
+  FXlong sz=file.size();
+  if(sz<=0 || 0x40000000<sz) return nullptr;                // sanity cap, 1GB
+  FXuchar* filedata;
+  if(!allocElms(filedata,(FXuint)sz)) return nullptr;
+  if(file.readBlock(filedata,sz)!=sz){ freeElms(filedata); return nullptr; }
+
+  FXFntFace* result=nullptr;
+  FXuint fsize=(FXuint)sz;
+  FXuint ne_off=0;
+  if(fntGet(filedata,fsize,0x3C,ne_off) && (FXuint)(ne_off+2)<=fsize && filedata[ne_off]=='N' && filedata[ne_off+1]=='E'){
+    FXushort ne_rsrctab=0;
+    if(fntGet(filedata,fsize,ne_off+0x24,ne_rsrctab)){
+      FXuint rsrc_off=ne_off+ne_rsrctab;
+      FXushort alignShift=0;
+      if(fntGet(filedata,fsize,rsrc_off,alignShift)){
+        FXuint p=rsrc_off+2;
+        FXint bestDiff=0x7fffffff;
+        FXuint bestOff=0,bestLen=0;
+        while(p+8<=fsize){
+          FXushort rtTypeID=0,rtResourceCount=0;
+          if(!fntGet(filedata,fsize,p,rtTypeID) || !fntGet(filedata,fsize,p+2,rtResourceCount)) break;
+          p+=8;
+          if(rtTypeID==0) break;
+          for(FXushort i=0; i<rtResourceCount; i++){
+            if(p+12>fsize) break;
+            FXushort rnOffset=0,rnLength=0;
+            fntGet(filedata,fsize,p,rnOffset);
+            fntGet(filedata,fsize,p+2,rnLength);
+            p+=12;
+            if(rtTypeID==0x8008){                            // RT_FONT
+              FXuint roff=((FXuint)rnOffset)<<alignShift;
+              FXuint rlen=((FXuint)rnLength)<<alignShift;
+              if(roff+rlen<=fsize && rlen>=0x76){
+                FXushort points=0;
+                fntGet(filedata,fsize,roff+0x44,points);
+                FXint diff=wantedPoints>0?FXABS((FXint)points-wantedPoints):0;
+                if(diff<bestDiff){ bestDiff=diff; bestOff=roff; bestLen=rlen; }
+                }
+              }
+            }
+          }
+        if(bestLen>0){
+          result=fntParseResource(filedata+bestOff,bestLen);
+          }
+        }
+      }
+    }
+  freeElms(filedata);
+  return result;
+  }
+
+
+// Free a face returned by fntLoad()
+static void fntFree(FXFntFace* face){
+  if(face){
+    freeElms(face->glyphs);
+    freeElms(face->data);
+    freeElms(face);
+    }
+  }
+
+
+// True if path looks like a .FON file by extension (case-insensitive)
+static FXbool fntIsFonPath(const FXString& path){
+  FXint len=path.length();
+  return 4<=len && Ascii::toLower(path[len-4])=='.' && Ascii::toLower(path[len-3])=='f' && Ascii::toLower(path[len-2])=='o' && Ascii::toLower(path[len-1])=='n';
+  }
+
+/*******************************************************************************/
+
 #else ///////////////////////////////// XLFD ////////////////////////////////////
 
 
@@ -1071,6 +1254,7 @@ FXFont::FXFont(){
 #else
   displayFont=nullptr;
   bitmapFont=nullptr;
+  fntFace=nullptr;
 #endif
   }
 
@@ -1097,6 +1281,7 @@ FXFont::FXFont(FXApp* a,const FXString& string):FXId(a){
 #else
   displayFont=nullptr;
   bitmapFont=nullptr;
+  fntFace=nullptr;
 #endif
   setFont(string);
   }
@@ -1124,6 +1309,7 @@ FXFont::FXFont(FXApp* a,const FXString& face,FXuint size,FXuint weight,FXuint sl
 #else
   displayFont=nullptr;
   bitmapFont=nullptr;
+  fntFace=nullptr;
 #endif
   }
 
@@ -1150,6 +1336,7 @@ FXFont::FXFont(FXApp* a,const FXFontDesc& fontdesc):FXId(a),wantedName(fontdesc.
 #else
   displayFont=nullptr;
   bitmapFont=nullptr;
+  fntFace=nullptr;
 #endif
   }
 
@@ -1213,6 +1400,20 @@ void FXFont::create(){
       // Phase 2 item 5).
 
       FXTRACE((150,"%s::create: xft font\n",getClassName()));
+
+      // Prototype (Phase 3b): wantedName pointing at a .FON file takes
+      // priority over everything below -- parse it directly rather than
+      // asking Xft/X11 to make sense of a name they have no idea is a
+      // bitmap font file. A .FON has no use for any Xft resource at all,
+      // so on success this skips the Xft match/displayFont dance entirely;
+      // xid just needs to be some non-zero value for the rest of FOX
+      // (id()-checking callers) to consider the font "created".
+      if(fntIsFonPath(wantedName)){
+        fntFace=fntLoad(wantedName,wantedSize/10);
+        if(fntFace) xid=(FXID)fntFace;
+        }
+
+      if(!fntFace){
 
       // Try to match with specified family and foundry
       if(!family.empty()){
@@ -1282,6 +1483,8 @@ void FXFont::create(){
         FXString bitmapName=xlfdFont(DISPLAY(getApp()),wantedName);
         bitmapFont=XLoadQueryFont(DISPLAY(getApp()),bitmapName.text());
         }
+
+      }   // !fntFace
 
 #else                           ///// XLFD /////
 
@@ -1410,7 +1613,11 @@ void FXFont::detach(){
     displayFont=nullptr;
     // Prototype (Phase 3): close the bitmap font too, if one was loaded.
     if(bitmapFont){ XFreeFont(DISPLAY(getApp()),(XFontStruct*)bitmapFont); bitmapFont=nullptr; }
-    XftFontClose(DISPLAY(getApp()),(XftFont*)font);
+    // Prototype (Phase 3b): free the parsed .FON face, if one was loaded --
+    // a .FON-backed font never opens an Xft `font` at all (see create()),
+    // so guard the XftFontClose below against that case.
+    if(fntFace){ fntFree((FXFntFace*)fntFace); fntFace=nullptr; }
+    if(font) XftFontClose(DISPLAY(getApp()),(XftFont*)font);
 
 #else                           ///// XLFD /////
 
@@ -1459,9 +1666,13 @@ void FXFont::destroy(){
       displayFont=nullptr;
       // Prototype (Phase 3): close the bitmap font too, if one was loaded.
       if(bitmapFont){ XFreeFont(DISPLAY(getApp()),(XFontStruct*)bitmapFont); bitmapFont=nullptr; }
+      // Prototype (Phase 3b): free the parsed .FON face, if one was loaded
+      // -- guard the XftFontClose below, since a .FON-backed font never
+      // opens an Xft `font` at all (see create()).
+      if(fntFace){ fntFree((FXFntFace*)fntFace); fntFace=nullptr; }
 
       // Free font
-      XftFontClose(DISPLAY(getApp()),(XftFont*)font);
+      if(font) XftFontClose(DISPLAY(getApp()),(XftFont*)font);
 
 #else                           ///// XLFD /////
 
@@ -1520,11 +1731,16 @@ GGI_MARK_NONEXISTING_GLYPHS Marks unsupported glyphs with the hexadecimal value 
 
 // Does font have given character glyph?
 FXbool FXFont::hasChar(FXwchar ch) const {
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     // FIXME may want to use GetGlyphIndices()
     return ((TEXTMETRIC*)font)->tmFirstChar<=ch && ch<=((TEXTMETRIC*)font)->tmLastChar;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    // Prototype (Phase 3b): a parsed .FON face takes over first.
+    if(fntFace){
+      const FXFntFace *ff=(FXFntFace*)fntFace;
+      return ff->firstChar<=(FXint)ch && (FXint)ch<=ff->lastChar;
+      }
     // Prototype (Phase 3): bitmap font, if any, takes over -- same
     // XFontStruct logic as the XLFD backend below (see PLAN.md, Phase 3).
     if(bitmapFont){
@@ -1686,10 +1902,11 @@ FXbool FXFont::isFontMono() const {
 
 // Get font width
 FXint FXFont::getFontWidth() const {
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmMaxCharWidth;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){ return ((FXFntFace*)fntFace)->maxWidth; }   // Phase 3b
     if(bitmapFont){ return ((XFontStruct*)bitmapFont)->max_bounds.width; }   // Phase 3
     return ((XftFont*)font)->max_advance_width;
 #else                           ///// XLFD /////
@@ -1702,10 +1919,11 @@ FXint FXFont::getFontWidth() const {
 
 // Get font height
 FXint FXFont::getFontHeight() const {
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmHeight;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){ return ((FXFntFace*)fntFace)->pixHeight; }   // Phase 3b
     if(bitmapFont){ return ((XFontStruct*)bitmapFont)->ascent+((XFontStruct*)bitmapFont)->descent; }   // Phase 3
     return ((XftFont*)font)->ascent+((XftFont*)font)->descent;
 #else                           ///// XLFD /////
@@ -1718,10 +1936,11 @@ FXint FXFont::getFontHeight() const {
 
 // Get font ascent
 FXint FXFont::getFontAscent() const {
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmAscent;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){ return ((FXFntFace*)fntFace)->ascent; }   // Phase 3b
     if(bitmapFont){ return ((XFontStruct*)bitmapFont)->ascent; }   // Phase 3
     return ((XftFont*)font)->ascent;
 #else                           ///// XLFD /////
@@ -1734,10 +1953,11 @@ FXint FXFont::getFontAscent() const {
 
 // Get font descent
 FXint FXFont::getFontDescent() const {
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmDescent;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){ return ((FXFntFace*)fntFace)->pixHeight-((FXFntFace*)fntFace)->ascent; }   // Phase 3b
     if(bitmapFont){ return ((XFontStruct*)bitmapFont)->descent; }   // Phase 3
     return ((XftFont*)font)->descent;
 #else                           ///// XLFD /////
@@ -1750,7 +1970,7 @@ FXint FXFont::getFontDescent() const {
 
 // Calculate width of single wide character in this font
 FXint FXFont::getCharWidth(const FXwchar ch) const {
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     FXnchar sbuffer[2];
     SIZE size;
@@ -1764,6 +1984,12 @@ FXint FXFont::getCharWidth(const FXwchar ch) const {
     GetTextExtentPoint32W((HDC)dc,sbuffer,1,&size);
     return size.cx;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){   // Phase 3b
+      const FXFntFace *ff=(FXFntFace*)fntFace;
+      FXint idx=(FXint)ch-ff->firstChar;
+      if(idx<0 || idx>ff->lastChar-ff->firstChar) idx=ff->defaultChar-ff->firstChar;
+      return (0<=idx && idx<=ff->lastChar-ff->firstChar)?ff->glyphs[idx].width:0;
+      }
     if(bitmapFont){   // Phase 3
       const XFontStruct *bfs=(XFontStruct*)bitmapFont;
       FXint bwidth,bsize;
@@ -1815,7 +2041,7 @@ FXint FXFont::getCharWidth(const FXwchar ch) const {
 // Text width
 FXint FXFont::getTextWidth(const FXchar *string,FXuint length) const {
   if(!string && length){ fxerror("%s::getTextWidth: NULL string argument\n",getClassName()); }
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
     FXnchar sbuffer[4096];
     FXint count=utf2ncs(sbuffer,string,ARRAYNUMBER(sbuffer),length);
@@ -1823,6 +2049,19 @@ FXint FXFont::getTextWidth(const FXchar *string,FXuint length) const {
     GetTextExtentPoint32W((HDC)dc,sbuffer,count,&size);
     return size.cx;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){   // Phase 3b
+      const FXFntFace *ff=(FXFntFace*)fntFace;
+      FXint fwidth=0;
+      FXuint fp=0;
+      while(fp<length){
+        FXwchar fw=wc(string+fp);
+        fp+=wclen(string+fp);
+        FXint idx=(FXint)fw-ff->firstChar;
+        if(idx<0 || idx>ff->lastChar-ff->firstChar) idx=ff->defaultChar-ff->firstChar;
+        if(0<=idx && idx<=ff->lastChar-ff->firstChar) fwidth+=ff->glyphs[idx].width;
+        }
+      return fwidth;
+      }
     if(bitmapFont){   // Phase 3 -- same XFontStruct-walking logic as XLFD backend below
       const XFontStruct *bfs=(XFontStruct*)bitmapFont;
       FXint bdefwidth=bfs->min_bounds.width;
@@ -1919,7 +2158,7 @@ FXint FXFont::getTextWidth(const FXString& string) const {
 // Text height
 FXint FXFont::getTextHeight(const FXchar *string,FXuint length) const {
   if(!string && length){ fxerror("%s::getTextHeight: NULL string argument\n",getClassName()); }
-  if(font){
+  if(xid){
 #if defined(WIN32)              ///// WIN32 /////
 //    SIZE size;
 //    FXASSERT(dc);
@@ -1927,6 +2166,7 @@ FXint FXFont::getTextHeight(const FXchar *string,FXuint length) const {
 //    return size.cy;
     return ((TEXTMETRIC*)font)->tmHeight;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(fntFace){ return ((FXFntFace*)fntFace)->pixHeight; }   // Phase 3b
     if(bitmapFont){ return ((XFontStruct*)bitmapFont)->ascent+((XFontStruct*)bitmapFont)->descent; }   // Phase 3
 //    XGlyphInfo extents;
 //    XftTextExtents8(DISPLAY(getApp()),(XftFont*)font,(const FcChar8*)text,n,&extents);

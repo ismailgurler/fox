@@ -168,6 +168,13 @@ protected:
   // each glyph as pixel-perfect NxN blocks with no antialiasing. Null for
   // ordinary (non-bitmap) fonts -- see PLAN.md, Phase 3.
   void     *bitmapFont;
+  // Prototype (Phase 3b): a genuine Windows .FON/FNT bitmap font, parsed
+  // directly from disk (an FXFntFace*, opaque here to avoid pulling the
+  // parser's types into every translation unit that includes this header)
+  // when wantedName is a path ending in .fon/.FON. Takes priority over
+  // bitmapFont when both are somehow set (they aren't, in practice --
+  // one font spec selects one source). See PLAN.md, Phase 3.
+  void     *fntFace;
 #endif
 private:
 #ifdef WIN32

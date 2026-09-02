@@ -307,6 +307,33 @@ int FXImage::ReleaseDC(FXID hdc) const {
 #endif
 
 
+#ifndef WIN32
+// Prototype: see FXImage.h -- nearest-neighbor NxN-duplicate data[] up to
+// width*scale x height*scale (see PLAN.md, Phase 2 item 4).
+FXColor* FXImage::scalePixelsUp(FXint scale) const {
+  FXColor* dst=nullptr;
+  if(1<scale && data && 0<width && 0<height){
+    FXint sw=width*scale;
+    if(allocElms(dst,(FXival)sw*height*scale)){
+      for(FXint y=0; y<height; y++){
+        const FXColor* srcrow=data+y*width;
+        for(FXint x=0; x<width; x++){
+          FXColor c=srcrow[x];
+          FXColor* dstpel=dst+(FXival)(y*scale)*sw+x*scale;
+          for(FXint dy=0; dy<scale; dy++){
+            for(FXint dx=0; dx<scale; dx++){
+              dstpel[(FXival)dy*sw+dx]=c;
+              }
+            }
+          }
+        }
+      }
+    }
+  return dst;
+  }
+#endif
+
+
 // Create image
 void FXImage::create(){
   if(!xid){
@@ -329,8 +356,12 @@ void FXImage::create(){
 
       FXASSERT_STATIC(sizeof(FXID)>=sizeof(Pixmap));
 
+      // Prototype: make the pixmap physically larger, keeping width/height
+      // themselves logical -- see PLAN.md, Phase 2 item 4.
+      FXint scale=getApp()->getScale();
+
       // Make pixmap
-      xid=XCreatePixmap(DISPLAY(getApp()),XDefaultRootWindow(DISPLAY(getApp())),FXMAX(width,1),FXMAX(height,1),visual->depth);
+      xid=XCreatePixmap(DISPLAY(getApp()),XDefaultRootWindow(DISPLAY(getApp())),FXMAX(width,1)*scale,FXMAX(height,1)*scale,visual->depth);
 
 #endif
 
@@ -338,7 +369,22 @@ void FXImage::create(){
       if(!xid){ throw FXImageException("unable to create image"); }
 
       // Render pixels
-      render();
+#ifndef WIN32
+      if(FXColor* scaled=scalePixelsUp(scale)){
+        FXColor* odata=data;
+        FXint ow=width, oh=height;
+        data=scaled;
+        width=ow*scale;
+        height=oh*scale;
+        render();
+        data=odata;
+        width=ow;
+        height=oh;
+        freeElms(scaled);
+        }
+      else
+#endif
+        render();
 
       // Release pixel buffer
       if(!(options&IMAGE_KEEP)) release();
@@ -1538,9 +1584,14 @@ void FXImage::resize(FXint w,FXint h){
       ::ReleaseDC(GetDesktopWindow(),hdc);
       if(!xid){ throw FXImageException("unable to resize image"); }
 #else
+      // Prototype: physically-larger pixmap, logical w/h (see PLAN.md,
+      // Phase 2 item 4). Caller is expected to re-render() afterward (per
+      // this function's own contract -- contents are undefined here
+      // regardless), so no scaled-buffer dance is needed at resize time.
       int dd=visual->getDepth();
+      FXint scale=getApp()->getScale();
       XFreePixmap(DISPLAY(getApp()),xid);
-      xid=XCreatePixmap(DISPLAY(getApp()),XDefaultRootWindow(DISPLAY(getApp())),w,h,dd);
+      xid=XCreatePixmap(DISPLAY(getApp()),XDefaultRootWindow(DISPLAY(getApp())),w*scale,h*scale,dd);
       if(!xid){ throw FXImageException("unable to resize image"); }
 #endif
       }

@@ -152,21 +152,43 @@ void FXIcon::create(){
       if(!etch){ fxerror("%s::create: unable to create icon.\n",getClassName()); }
 #else
 
+      // Prototype: pixmaps (color, shape, etch) all made physically larger
+      // together, keeping width/height logical -- shape/etch derive from
+      // the same width/height/data as the color pixmap in render() below,
+      // so scaling them in lockstep keeps all three pixel-aligned (see
+      // PLAN.md, Phase 2 item 4).
+      FXint scale=getApp()->getScale();
+
       // Make image pixmap
-      xid=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),FXMAX(width,1),FXMAX(height,1),visual->depth);
+      xid=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),FXMAX(width,1)*scale,FXMAX(height,1)*scale,visual->depth);
       if(!xid){ fxerror("%s::create: unable to create icon.\n",getClassName()); }
 
       // Make shape pixmap
-      shape=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),FXMAX(width,1),FXMAX(height,1),1);
+      shape=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),FXMAX(width,1)*scale,FXMAX(height,1)*scale,1);
       if(!shape){ fxerror("%s::create: unable to create icon.\n",getClassName()); }
 
       // Make etch pixmap
-      etch=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),FXMAX(width,1),FXMAX(height,1),1);
+      etch=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),FXMAX(width,1)*scale,FXMAX(height,1)*scale,1);
       if(!etch){ fxerror("%s::create: unable to create icon.\n",getClassName()); }
 #endif
 
       // Render pixels
-      render();
+#ifndef WIN32
+      if(FXColor* scaled=scalePixelsUp(scale)){
+        FXColor* odata=data;
+        FXint ow=width, oh=height;
+        data=scaled;
+        width=ow*scale;
+        height=oh*scale;
+        render();
+        data=odata;
+        width=ow;
+        height=oh;
+        freeElms(scaled);
+        }
+      else
+#endif
+        render();
 
       // If we're not keeping the pixel buffer, release it
       if(!(options&IMAGE_KEEP)) release();
@@ -548,21 +570,27 @@ void FXIcon::resize(FXint w,FXint h){
       // Get depth (should use visual!!)
       int dd=visual->getDepth();
 
+      // Prototype: physically-larger pixmaps, logical w/h (see PLAN.md,
+      // Phase 2 item 4). Contents are undefined after resize regardless
+      // (per this function's contract), so no scaled-buffer dance needed
+      // here -- the caller is expected to re-render() afterward.
+      FXint scale=getApp()->getScale();
+
       // Free old pixmaps
       XFreePixmap((Display*)getApp()->getDisplay(),xid);
       XFreePixmap((Display*)getApp()->getDisplay(),etch);
       XFreePixmap((Display*)getApp()->getDisplay(),shape);
 
       // Make new pixmap
-      xid=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),w,h,dd);
+      xid=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),w*scale,h*scale,dd);
       if(!xid){ fxerror("%s::resize: unable to resize image.\n",getClassName()); }
 
       // Make shape pixmap
-      shape=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),w,h,1);
+      shape=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),w*scale,h*scale,1);
       if(!shape){ fxerror("%s::create: unable to create icon.\n",getClassName()); }
 
       // Make etch pixmap
-      etch=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),w,h,1);
+      etch=XCreatePixmap((Display*)getApp()->getDisplay(),XDefaultRootWindow((Display*)getApp()->getDisplay()),w*scale,h*scale,1);
       if(!etch){ fxerror("%s::create: unable to create icon.\n",getClassName()); }
 #endif
       }

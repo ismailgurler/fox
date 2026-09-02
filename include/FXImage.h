@@ -71,6 +71,14 @@ class FXAPI FXImage : public FXDrawable {
 protected:
   FXColor *data;        // Pixel data
   FXuint   options;     // Options
+#ifndef WIN32
+  // Prototype: nearest-neighbor NxN-duplicate data[] to width*scale x
+  // height*scale, for create()/resize() to temporarily render into a
+  // physically-larger pixmap while width/height stay logical (see
+  // PLAN.md, Phase 2 item 4). Returns nullptr if scale<=1, no data, or
+  // allocation failure; caller frees the result with freeElms().
+  FXColor *scalePixelsUp(FXint scale) const;
+#endif
 private:
 #ifdef WIN32
   virtual FXID GetDC() const;

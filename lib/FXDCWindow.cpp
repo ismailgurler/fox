@@ -2585,11 +2585,12 @@ void FXDCWindow::drawArea(const FXDrawable* source,FXint sx,FXint sy,FXint sw,FX
 void FXDCWindow::drawImage(const FXImage* image,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawImage: DC not connected to drawable.\n"); }
   if(!image || !image->id()){ fxerror("FXDCWindow::drawImage: illegal image specified.\n"); }
-  // Prototype: position logical, scaled to physical; the image's own pixels
-  // aren't resampled yet, so it still draws at its native size (see
-  // PLAN.md, Phase 2 item 4).
+  // Prototype: position logical, scaled to physical; image->width/height
+  // are logical too, but the underlying pixmap is now physically NxN
+  // pixel-doubled (FXImage::create()/render()), so the copy size scales
+  // too (see PLAN.md, Phase 2 item 4).
   FXint scale=getApp()->getScale();
-  XCopyArea((Display*)getApp()->getDisplay(),image->id(),surface->id(),(GC)ctx,0,0,image->width,image->height,dx*scale,dy*scale);
+  XCopyArea((Display*)getApp()->getDisplay(),image->id(),surface->id(),(GC)ctx,0,0,image->width*scale,image->height*scale,dx*scale,dy*scale);
   }
 
 
@@ -2606,16 +2607,17 @@ void FXDCWindow::drawBitmap(const FXBitmap* bitmap,FXint dx,FXint dy) {
 void FXDCWindow::drawIcon(const FXIcon* icon,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawIcon: DC not connected to drawable.\n"); }
   if(!icon || !icon->id() || !icon->shape){ fxerror("FXDCWindow::drawIcon: illegal icon specified.\n"); }
-  // Prototype: d.x/d.y/dx/dy/clip are all logical; d.w/d.h and the
-  // d.x-dx/d.y-dy source offset stay logical too since they index into the
-  // icon's own (not yet resampled) pixels -- only the final device position
-  // and clip get scaled to physical (see PLAN.md, Phase 2 item 4 for the
-  // still-open icon resampling work).
+  // Prototype: d.x/d.y/dx/dy/clip stay logical for the intersection math
+  // (matches how every other widget/layout coordinate works), but the
+  // underlying pixmaps (color+shape) are now physically NxN pixel-doubled
+  // (FXIcon::create()/render()), so the source offset and copy size scale
+  // too, alongside the destination position and clip (see PLAN.md, Phase 2
+  // item 4).
   FXint scale=getApp()->getScale();
   FXRectangle d=clip*FXRectangle(dx,dy,icon->width,icon->height);
   if(d.w>0 && d.h>0){
     if(icon->getOptions()&IMAGE_OPAQUE){
-      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x*scale,d.y*scale);
+      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,(d.x-dx)*scale,(d.y-dy)*scale,d.w*scale,d.h*scale,d.x*scale,d.y*scale);
       }
     else{
       XGCValues gcv;
@@ -2623,7 +2625,7 @@ void FXDCWindow::drawIcon(const FXIcon* icon,FXint dx,FXint dy){
       gcv.clip_x_origin=dx*scale;
       gcv.clip_y_origin=dy*scale;
       XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
-      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x*scale,d.y*scale);
+      XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,(d.x-dx)*scale,(d.y-dy)*scale,d.w*scale,d.h*scale,d.x*scale,d.y*scale);
       {
       XRectangle sc=scaledClipRect(clip,scale);
       XSetClipRectangles((Display*)getApp()->getDisplay(),(GC)ctx,0,0,&sc,1,Unsorted); // Restore old clip rectangle
@@ -2638,8 +2640,8 @@ void FXDCWindow::drawIcon(const FXIcon* icon,FXint dx,FXint dy){
 void FXDCWindow::drawIconShaded(const FXIcon* icon,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawIconShaded: DC not connected to drawable.\n"); }
   if(!icon || !icon->id() || !icon->shape){ fxerror("FXDCWindow::drawIconShaded: illegal icon specified.\n"); }
-  // Prototype: see drawIcon() above -- d.w/d.h and source offsets stay
-  // logical (icon isn't resampled yet), only device position/clip scale.
+  // Prototype: see drawIcon() above -- source offset and copy size scale
+  // too, since the icon's pixmaps are now physically NxN pixel-doubled.
   FXint scale=getApp()->getScale();
   FXRectangle d=clip*FXRectangle(dx,dy,icon->width,icon->height);
   if(d.w>0 && d.h>0){
@@ -2648,7 +2650,7 @@ void FXDCWindow::drawIconShaded(const FXIcon* icon,FXint dx,FXint dy){
     gcv.clip_x_origin=dx*scale;
     gcv.clip_y_origin=dy*scale;
     XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
-    XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,d.x-dx,d.y-dy,d.w,d.h,d.x*scale,d.y*scale);
+    XCopyArea((Display*)getApp()->getDisplay(),icon->id(),surface->id(),(GC)ctx,(d.x-dx)*scale,(d.y-dy)*scale,d.w*scale,d.h*scale,d.x*scale,d.y*scale);
     gcv.function=BLT_SRC;
     gcv.stipple=getApp()->stipples[STIPPLE_GRAY];
     gcv.fill_style=FILL_STIPPLED;
@@ -2656,7 +2658,7 @@ void FXDCWindow::drawIconShaded(const FXIcon* icon,FXint dx,FXint dy){
     gcv.ts_y_origin=dy*scale;
     gcv.foreground=surface->visual->getPixel(getApp()->getSelbackColor());
     XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction|GCTileStipXOrigin|GCTileStipYOrigin|GCStipple|GCFillStyle,&gcv);
-    XFillRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,d.x*scale,d.y*scale,d.w,d.h);
+    XFillRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,d.x*scale,d.y*scale,d.w*scale,d.h*scale);
     gcv.function=rop;
     gcv.fill_style=fill;
     gcv.ts_x_origin=tx*scale;
@@ -2675,11 +2677,14 @@ void FXDCWindow::drawIconShaded(const FXIcon* icon,FXint dx,FXint dy){
 void FXDCWindow::drawIconSunken(const FXIcon* icon,FXint dx,FXint dy){
   if(!surface){ fxerror("FXDCWindow::drawIconSunken: DC not connected to drawable.\n"); }
   if(!icon || !icon->id() || !icon->etch){ fxerror("FXDCWindow::drawIconSunken: illegal icon specified.\n"); }
-  // Prototype: dx/dy scaled to physical; icon->width/height and the 1px
-  // etch offset stay native (icon isn't resampled yet -- PLAN.md Phase 2
-  // item 4).
+  // Prototype: dx/dy scaled to physical; icon->width/height are logical
+  // but icon->etch is now physically NxN pixel-doubled (FXIcon::create()/
+  // render()), so the copy size scales too. The 1px etch offset stays a
+  // single physical pixel (a hairline highlight/shadow effect, not a
+  // border -- see PLAN.md Phase 2 item 4).
   FXint scale=getApp()->getScale();
   FXint pdx=dx*scale, pdy=dy*scale;
+  FXint ew=icon->width*scale, eh=icon->height*scale;
   XGCValues gcv;
   FXColor base=getApp()->getBaseColor();
   FXColor clr=FXRGB((85*FXREDVAL(base))/100,(85*FXGREENVAL(base))/100,(85*FXBLUEVAL(base))/100);
@@ -2689,25 +2694,25 @@ void FXDCWindow::drawIconSunken(const FXIcon* icon,FXint dx,FXint dy){
   gcv.foreground=0xffffffff;
   gcv.function=BLT_NOT_SRC_AND_DST;
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCBackground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx+1,pdy+1,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,ew,eh,pdx+1,pdy+1,1);
 
   // Paint highlight part
   gcv.function=BLT_SRC_OR_DST;
   gcv.foreground=surface->visual->getPixel(getApp()->getHiliteColor());
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx+1,pdy+1,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,ew,eh,pdx+1,pdy+1,1);
 
   // Erase to black
   gcv.foreground=0xffffffff;
   gcv.function=BLT_NOT_SRC_AND_DST;
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx,pdy,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,ew,eh,pdx,pdy,1);
 
   // Paint shadow part
   gcv.function=BLT_SRC_OR_DST;
   gcv.foreground=surface->visual->getPixel(clr);
   XChangeGC((Display*)getApp()->getDisplay(),(GC)ctx,GCForeground|GCFunction,&gcv);
-  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,icon->width,icon->height,pdx,pdy,1);
+  XCopyPlane((Display*)getApp()->getDisplay(),icon->etch,surface->id(),(GC)ctx,0,0,ew,eh,pdx,pdy,1);
 
   // Restore stuff
   gcv.foreground=devfg;

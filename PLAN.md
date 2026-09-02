@@ -108,14 +108,37 @@ Branch: `feature/integer-pixel-scaling`.
     - Verified on Pathfinder (toolbar/tree/file-list icons visibly
       pixel-doubled, correctly positioned) and `tests/iconlist` (large icon
       view) at scale=2.
-  - **Remaining before Phase 2 can be called done**: glyph-size scaling
-    (below) is the only substantial piece left; the array/batch-primitive
-    edge cases and broader multi-app testing are lower-priority polish, not
-    blockers.
-  - **Glyph-size scaling needs redoing**: a font that renders bigger without
-    lying about its logical metrics — e.g. a second, physically-scaled
-    `XftFont` used only for drawing, while the font object's metric-query
-    methods stay backed by the logical-size font. See Phase 2 item 5 / Phase 3.
+  - **Glyph-size scaling (commit `36f9c26`) — PHASE 2 DONE.** `FXFont` now
+    has a second XftFont member, `displayFont`, opened at the physically-
+    scaled pixel size and used only by `FXDCWindow::drawText`/
+    `drawImageText` for rendering. `font` itself — and every metric method
+    built on it (`getFontHeight`, `getTextWidth`, ...) — stays at the
+    logical size, so layout math is never lied to. This is exactly the fix
+    the Phase 1 revert (above) said was missing.
+    - `match()` mutates `xid` and the `actual*` metadata fields as a side
+      effect of matching a font; creating `displayFont` via a second
+      `match()` call saves/restores those around it so they keep
+      describing `font` (the logical one) exactly as before, and restores
+      `xid=(FXID)font` afterward.
+    - At scale=1, `displayFont` is just set to `font` — no second FcMatch,
+      no extra X server resource, and (verified) rendering is bit-identical
+      to before this commit.
+    - `drawImageText`'s erase-rectangle position/size was previously
+      entirely unscaled (a pre-existing gap, unrelated to font size) — now
+      scales too, fixed incidentally while touching this code.
+    - Verified on Pathfinder and `tests/table` at scale=2: text renders at
+      the correct bigger size, correctly positioned, full layout intact —
+      no double-scaling. `tests/table` at scale=1 confirmed unchanged.
+
+  **Phase 2 is now done.** Every item from the original plan (geometry,
+  drawing primitives — scalar and array/batch, icon/image pixel content,
+  clipping, systematic input/event translation, glyph size) is implemented
+  and verified across Pathfinder plus five `tests/*` example apps at
+  scale=2 (table also at scale=3). Remaining known gaps are narrow and
+  deliberately deferred, not blockers: `FXImage::restore()` (opt-in API,
+  no internal callers), `FXWindow` popups/drag-corners/multi-monitor/GL
+  canvases (Phase 4 polish, per the original plan). Next up is Phase 3
+  (native bitmap font backend) or Phase 4 polish, as needed.
 
 ## High-Level Recap
 

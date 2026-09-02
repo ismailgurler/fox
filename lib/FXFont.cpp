@@ -568,6 +568,21 @@ void* FXFont::match(const FXString& wantfamily,const FXString& wantforge,FXuint 
   }
 
 
+// Prototype (Phase 3): resolve a possibly-wildcarded/aliased X11 core font
+// name (e.g. "9x15", "-misc-fixed-*") to a concrete font name, the same way
+// the XLFD-only backend below does -- duplicated here (rather than shared)
+// since that copy only compiles when HAVE_XFT_H is undefined.
+static FXString xlfdFont(Display *dpy,const FXString& font){
+  char **fontnames; int nfontnames;
+  FXString fontname(font);
+  if((fontnames=XListFonts(dpy,font.text(),1,&nfontnames))!=nullptr){
+    fontname=fontnames[0];
+    XFreeFontNames(fontnames);
+    }
+  return fontname;
+  }
+
+
 #else ///////////////////////////////// XLFD ////////////////////////////////////
 
 
@@ -1055,6 +1070,7 @@ FXFont::FXFont(){
   dc=nullptr;
 #else
   displayFont=nullptr;
+  bitmapFont=nullptr;
 #endif
   }
 
@@ -1080,6 +1096,7 @@ FXFont::FXFont(FXApp* a,const FXString& string):FXId(a){
   dc=nullptr;
 #else
   displayFont=nullptr;
+  bitmapFont=nullptr;
 #endif
   setFont(string);
   }
@@ -1106,6 +1123,7 @@ FXFont::FXFont(FXApp* a,const FXString& face,FXuint size,FXuint weight,FXuint sl
   dc=nullptr;
 #else
   displayFont=nullptr;
+  bitmapFont=nullptr;
 #endif
   }
 
@@ -1131,6 +1149,7 @@ FXFont::FXFont(FXApp* a,const FXFontDesc& fontdesc):FXId(a),wantedName(fontdesc.
   dc=nullptr;
 #else
   displayFont=nullptr;
+  bitmapFont=nullptr;
 #endif
   }
 
@@ -1252,6 +1271,17 @@ void FXFont::create(){
         xid=(FXID)font;
         }
       }
+
+      // Prototype (Phase 3): the X11 hint requests a genuine X11 core
+      // bitmap font by name (e.g. wantedName="9x15") alongside the normal
+      // Xft font -- xlfdFont() resolves any wildcards/aliases the same way
+      // the XLFD-only backend below does. Metrics and drawText() switch to
+      // it (via bitmapFont) when present; harmless no-op (bitmapFont stays
+      // null) for the vast majority of fonts that don't request this.
+      if(hints&FXFont::X11){
+        FXString bitmapName=xlfdFont(DISPLAY(getApp()),wantedName);
+        bitmapFont=XLoadQueryFont(DISPLAY(getApp()),bitmapName.text());
+        }
 
 #else                           ///// XLFD /////
 
@@ -1378,6 +1408,8 @@ void FXFont::detach(){
     // same pointer as font, so don't close it twice.
     if(displayFont && displayFont!=font){ XftFontClose(DISPLAY(getApp()),(XftFont*)displayFont); }
     displayFont=nullptr;
+    // Prototype (Phase 3): close the bitmap font too, if one was loaded.
+    if(bitmapFont){ XFreeFont(DISPLAY(getApp()),(XFontStruct*)bitmapFont); bitmapFont=nullptr; }
     XftFontClose(DISPLAY(getApp()),(XftFont*)font);
 
 #else                           ///// XLFD /////
@@ -1425,6 +1457,8 @@ void FXFont::destroy(){
       // it's the same pointer as font (scale=1).
       if(displayFont && displayFont!=font){ XftFontClose(DISPLAY(getApp()),(XftFont*)displayFont); }
       displayFont=nullptr;
+      // Prototype (Phase 3): close the bitmap font too, if one was loaded.
+      if(bitmapFont){ XFreeFont(DISPLAY(getApp()),(XFontStruct*)bitmapFont); bitmapFont=nullptr; }
 
       // Free font
       XftFontClose(DISPLAY(getApp()),(XftFont*)font);
@@ -1491,6 +1525,20 @@ FXbool FXFont::hasChar(FXwchar ch) const {
     // FIXME may want to use GetGlyphIndices()
     return ((TEXTMETRIC*)font)->tmFirstChar<=ch && ch<=((TEXTMETRIC*)font)->tmLastChar;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    // Prototype (Phase 3): bitmap font, if any, takes over -- same
+    // XFontStruct logic as the XLFD backend below (see PLAN.md, Phase 3).
+    if(bitmapFont){
+      const XFontStruct *bfs=(XFontStruct*)bitmapFont;
+      const XCharStruct *bcm;
+      FXuchar brow=ch>>8;
+      FXuchar bcol=ch&255;
+      if(bfs->min_char_or_byte2<=bcol && bcol<=bfs->max_char_or_byte2 && bfs->min_byte1<=brow && brow<=bfs->max_byte1){
+        if(!bfs->per_char) return true;
+        bcm=bfs->per_char+((brow-bfs->min_byte1)*(bfs->max_char_or_byte2-bfs->min_char_or_byte2+1))+(bcol-bfs->min_char_or_byte2);
+        if(bcm->width || bcm->ascent || bcm->descent || bcm->rbearing || bcm->lbearing) return true;
+        }
+      return false;
+      }
     return XftCharExists(DISPLAY(getApp()),(XftFont*)font,ch);
 #else                           ///// XLFD /////
     const XFontStruct *fs=(XFontStruct*)font;
@@ -1642,6 +1690,7 @@ FXint FXFont::getFontWidth() const {
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmMaxCharWidth;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){ return ((XFontStruct*)bitmapFont)->max_bounds.width; }   // Phase 3
     return ((XftFont*)font)->max_advance_width;
 #else                           ///// XLFD /////
     return ((XFontStruct*)font)->max_bounds.width;
@@ -1657,6 +1706,7 @@ FXint FXFont::getFontHeight() const {
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmHeight;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){ return ((XFontStruct*)bitmapFont)->ascent+((XFontStruct*)bitmapFont)->descent; }   // Phase 3
     return ((XftFont*)font)->ascent+((XftFont*)font)->descent;
 #else                           ///// XLFD /////
     return ((XFontStruct*)font)->ascent+((XFontStruct*)font)->descent;
@@ -1672,6 +1722,7 @@ FXint FXFont::getFontAscent() const {
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmAscent;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){ return ((XFontStruct*)bitmapFont)->ascent; }   // Phase 3
     return ((XftFont*)font)->ascent;
 #else                           ///// XLFD /////
     return ((XFontStruct*)font)->ascent;
@@ -1687,6 +1738,7 @@ FXint FXFont::getFontDescent() const {
 #if defined(WIN32)              ///// WIN32 /////
     return ((TEXTMETRIC*)font)->tmDescent;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){ return ((XFontStruct*)bitmapFont)->descent; }   // Phase 3
     return ((XftFont*)font)->descent;
 #else                           ///// XLFD /////
     return ((XFontStruct*)font)->descent;
@@ -1712,6 +1764,26 @@ FXint FXFont::getCharWidth(const FXwchar ch) const {
     GetTextExtentPoint32W((HDC)dc,sbuffer,1,&size);
     return size.cx;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){   // Phase 3
+      const XFontStruct *bfs=(XFontStruct*)bitmapFont;
+      FXint bwidth,bsize;
+      FXuchar br,bc;
+      if(bfs->per_char){
+        br=ch>>8;
+        bc=ch&255;
+        bsize=(bfs->max_char_or_byte2-bfs->min_char_or_byte2+1);
+        if(bfs->min_char_or_byte2<=bc && bc<=bfs->max_char_or_byte2 && bfs->min_byte1<=br && br<=bfs->max_byte1){
+          bwidth=bfs->per_char[(br-bfs->min_byte1)*bsize+(bc-bfs->min_char_or_byte2)].width;
+          if(bwidth) return bwidth;
+          }
+        br=bfs->default_char>>8;
+        bc=bfs->default_char&255;
+        if(bfs->min_char_or_byte2<=bc && bc<=bfs->max_char_or_byte2 && bfs->min_byte1<=br && br<=bfs->max_byte1){
+          return bfs->per_char[(br-bfs->min_byte1)*bsize+(bc-bfs->min_char_or_byte2)].width;
+          }
+        }
+      return bfs->min_bounds.width;
+      }
     XGlyphInfo extents;
     XftTextExtents32(DISPLAY(getApp()),(XftFont*)font,(const FcChar32*)&ch,1,&extents);
     return extents.xOff;
@@ -1751,6 +1823,43 @@ FXint FXFont::getTextWidth(const FXchar *string,FXuint length) const {
     GetTextExtentPoint32W((HDC)dc,sbuffer,count,&size);
     return size.cx;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){   // Phase 3 -- same XFontStruct-walking logic as XLFD backend below
+      const XFontStruct *bfs=(XFontStruct*)bitmapFont;
+      FXint bdefwidth=bfs->min_bounds.width;
+      FXint bwidth=0,bww;
+      FXuint bp=0;
+      FXuint bs;
+      FXuchar br,bc;
+      FXwchar bw;
+      if(bfs->per_char){
+        br=bfs->default_char>>8;
+        bc=bfs->default_char&255;
+        bs=(bfs->max_char_or_byte2-bfs->min_char_or_byte2+1);
+        if(bfs->min_char_or_byte2<=bc && bc<=bfs->max_char_or_byte2 && bfs->min_byte1<=br && br<=bfs->max_byte1){
+          bdefwidth=bfs->per_char[(br-bfs->min_byte1)*bs+(bc-bfs->min_char_or_byte2)].width;
+          }
+        while(bp<length){
+          bw=wc(string+bp);
+          bp+=wclen(string+bp);
+          br=bw>>8;
+          bc=bw&255;
+          if(bfs->min_char_or_byte2<=bc && bc<=bfs->max_char_or_byte2 && bfs->min_byte1<=br && br<=bfs->max_byte1){
+            if((bww=bfs->per_char[(br-bfs->min_byte1)*bs+(bc-bfs->min_char_or_byte2)].width)!=0){
+              bwidth+=bww;
+              continue;
+              }
+            }
+          bwidth+=bdefwidth;
+          }
+        }
+      else{
+        while(bp<length){
+          bp+=wclen(string+bp);
+          bwidth+=bdefwidth;
+          }
+        }
+      return bwidth;
+      }
     XGlyphInfo extents;
     // This returns rotated metrics; FOX likes to work with unrotated metrics, so if angle
     // is not 0, we calculate the unrotated baseline; note however that the calculation is
@@ -1818,6 +1927,7 @@ FXint FXFont::getTextHeight(const FXchar *string,FXuint length) const {
 //    return size.cy;
     return ((TEXTMETRIC*)font)->tmHeight;
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+    if(bitmapFont){ return ((XFontStruct*)bitmapFont)->ascent+((XFontStruct*)bitmapFont)->descent; }   // Phase 3
 //    XGlyphInfo extents;
 //    XftTextExtents8(DISPLAY(getApp()),(XftFont*)font,(const FcChar8*)text,n,&extents);
 //    return extents.height; // TODO: Is this correct?

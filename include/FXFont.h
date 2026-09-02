@@ -160,6 +160,14 @@ protected:
   // etc (backed by `font` above) stay logical while glyphs render bigger.
   // Same pointer as `font` when scale==1 (see PLAN.md, Phase 2 item 5).
   void     *displayFont;
+  // Prototype (Phase 3): a genuine X11 core bitmap font (XFontStruct*),
+  // loaded via the classic XLoadQueryFont when the X11 hint requests one
+  // (e.g. wantedName="9x15") -- independent of Xft's `font`/`displayFont`.
+  // When set, metrics (getFontAscent/Descent/Height/Width, getTextWidth,
+  // hasChar, getCharWidth) and drawText() both switch to it, rendering
+  // each glyph as pixel-perfect NxN blocks with no antialiasing. Null for
+  // ordinary (non-bitmap) fonts -- see PLAN.md, Phase 3.
+  void     *bitmapFont;
 #endif
 private:
 #ifdef WIN32

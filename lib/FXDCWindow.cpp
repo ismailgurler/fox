@@ -2399,6 +2399,115 @@ static FXint utf2db(XChar2b *dst,const FXchar *src,FXint n){
   }
 
 
+// Prototype (Phase 3): render text with a genuine X11 core bitmap font
+// (font->bitmapFont) as pixel-perfect NxN blocks -- no antialiasing or
+// interpolation, at the same global scale as everything else. Draws at
+// native 1x onto an offscreen 1-bit pixmap via the classic XDrawString16
+// (the exact glyph shapes the font ships, untouched), then -- for scale>1
+// -- nearest-neighbor duplicates each pixel into an NxN block before
+// blitting; the caller's ctx already carries the right foreground/
+// background for the final XCopyPlane, same as drawIconSunken()'s etch
+// blit (see PLAN.md, Phase 3).
+static void drawBitmapText(Display* dpy,Drawable surfaceId,GC ctx,XFontStruct* fs,FXint scale,FXint x,FXint y,const FXchar* string,FXuint length,const FXRectangle& clip){
+  XChar2b sbuffer[4096];
+  FXint count=utf2db(sbuffer,string,FXMIN((FXint)length,4096));
+  if(count<=0) return;
+
+  FXint dir,fascent,fdescent;
+  XCharStruct overall;
+  XTextExtents16(fs,sbuffer,count,&dir,&fascent,&fdescent,&overall);
+  FXint textw=overall.width;
+  FXint texth=fs->ascent+fs->descent;
+  if(textw<=0) textw=1;
+  if(texth<=0) texth=1;
+
+  // Render at native 1x onto an offscreen 1-bit pixmap
+  Pixmap srcbm=XCreatePixmap(dpy,surfaceId,textw,texth,1);
+  GC bmgc=XCreateGC(dpy,srcbm,0,nullptr);
+  XSetForeground(dpy,bmgc,0);
+  XFillRectangle(dpy,srcbm,bmgc,0,0,textw,texth);
+  XSetForeground(dpy,bmgc,1);
+  XSetFont(dpy,bmgc,fs->fid);
+  XDrawString16(dpy,srcbm,bmgc,0,fs->ascent,sbuffer,count);
+  XFreeGC(dpy,bmgc);
+
+  // Prototype: unlike XCopyPlane (which paints an *opaque* box -- both
+  // foreground where the bit is set and background where it isn't, and DC
+  // background defaults to devbg=0, which usually IS black, same as most
+  // foreground text -- explains an earlier all-black-box bug here), text
+  // must draw *transparently*: only the glyph pixels get painted, nothing
+  // else is touched. So use the rendered bitmap as a clip mask and fill
+  // through it with the foreground color, exactly like drawIcon()'s
+  // transparency mask (see PLAN.md, Phase 3).
+  Pixmap maskbm=srcbm;
+  FXint maskw=textw, maskh=texth;
+
+  if(scale>1){
+    // Nearest-neighbor pixel-block scale-up, exactly the technique used
+    // for icons in FXImage::scalePixelsUp() (Phase 2 item 4), applied to
+    // a 1-bit bitmap instead of FXColor pixels.
+    XImage* srcim=XGetImage(dpy,srcbm,0,0,textw,texth,1,XYPixmap);
+    XFreePixmap(dpy,srcbm);
+    if(!srcim) return;
+
+    FXint dstw=textw*scale, dsth=texth*scale;
+    XImage* dstim=XCreateImage(dpy,DefaultVisual(dpy,DefaultScreen(dpy)),1,XYBitmap,0,nullptr,dstw,dsth,32,0);
+    if(!dstim || !allocElms(dstim->data,(FXival)dstim->bytes_per_line*dsth)){
+      XDestroyImage(srcim);
+      if(dstim) XDestroyImage(dstim);
+      return;
+      }
+    memset(dstim->data,0,(FXival)dstim->bytes_per_line*dsth);
+    for(FXint sy=0; sy<texth; sy++){
+      for(FXint sx=0; sx<textw; sx++){
+        if(XGetPixel(srcim,sx,sy)){
+          for(FXint dy=0; dy<scale; dy++){
+            for(FXint dx=0; dx<scale; dx++){
+              XPutPixel(dstim,sx*scale+dx,sy*scale+dy,1);
+              }
+            }
+          }
+        }
+      }
+    XDestroyImage(srcim);
+
+    // XPutImage with XYBitmap format treats the image as a stencil, using
+    // the GC's foreground pixel for set bits and background for unset --
+    // and X11's default GC has foreground=0/background=1, which would
+    // invert our carefully-built bit pattern on upload. Set them
+    // explicitly so dstim's bits transfer to maskbm unchanged.
+    maskbm=XCreatePixmap(dpy,surfaceId,dstw,dsth,1);
+    GC maskgc=XCreateGC(dpy,maskbm,0,nullptr);
+    XSetForeground(dpy,maskgc,1);
+    XSetBackground(dpy,maskgc,0);
+    XPutImage(dpy,maskbm,maskgc,dstim,0,0,0,0,dstw,dsth);
+    XFreeGC(dpy,maskgc);
+    freeElms(dstim->data);
+    dstim->data=nullptr;
+    XDestroyImage(dstim);
+    maskw=dstw;
+    maskh=dsth;
+    }
+
+  FXint destx=x, desty=y-fs->ascent*scale;
+  XGCValues gcv;
+  gcv.clip_mask=maskbm;
+  gcv.clip_x_origin=destx;
+  gcv.clip_y_origin=desty;
+  XChangeGC(dpy,ctx,GCClipMask|GCClipXOrigin|GCClipYOrigin,&gcv);
+  XFillRectangle(dpy,surfaceId,ctx,destx,desty,maskw,maskh);
+
+  // Restore the DC's own (rectangle) clip -- same helper used everywhere
+  // else in this file for exactly this purpose.
+  {
+  XRectangle sc=scaledClipRect(clip,scale);
+  XSetClipRectangles(dpy,ctx,0,0,&sc,1,Unsorted);
+  }
+
+  XFreePixmap(dpy,maskbm);
+  }
+
+
 // Draw string with base line starting at x, y
 void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   if(!surface){ fxerror("FXDCWindow::drawText: DC not connected to drawable.\n"); }
@@ -2410,6 +2519,13 @@ void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   // metrics (getFontHeight/getTextWidth, used throughout layout) lying
   // about being logical (see PLAN.md, Phase 2 item 5).
   FXint scale=getApp()->getScale();
+  // Prototype (Phase 3): a genuine X11 core bitmap font takes over
+  // entirely -- pixel-perfect NxN blocks, no antialiasing.
+  if(font->bitmapFont){
+    drawBitmapText((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,(XFontStruct*)font->bitmapFont,scale,x*scale,y*scale,string,length,clip);
+    flags|=GCClipMask;
+    return;
+    }
   XftColor color;
   color.pixel=devfg;
   color.color.red=FXREDVAL(fg)*257;

@@ -153,7 +153,14 @@ protected:
   FXushort  hints;              // Matching hint flags
   FXushort  flags;              // Actual flags
   FXshort   angle;              // Angle
-  void     *font;               // Info about the font
+  void     *font;               // Info about the font, at logical size -- metrics (getFontHeight() etc) are always queried from this one
+#ifndef WIN32
+  // Prototype: a second XftFont, opened at the physically-scaled pixel
+  // size, used only for drawing glyphs -- so getFontHeight()/getTextWidth()
+  // etc (backed by `font` above) stay logical while glyphs render bigger.
+  // Same pointer as `font` when scale==1 (see PLAN.md, Phase 2 item 5).
+  void     *displayFont;
+#endif
 private:
 #ifdef WIN32
   FXID      dc;

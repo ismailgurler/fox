@@ -1053,6 +1053,8 @@ FXFont::FXFont(){
   font=nullptr;
 #ifdef WIN32
   dc=nullptr;
+#else
+  displayFont=nullptr;
 #endif
   }
 
@@ -1076,6 +1078,8 @@ FXFont::FXFont(FXApp* a,const FXString& string):FXId(a){
   font=nullptr;
 #ifdef WIN32
   dc=nullptr;
+#else
+  displayFont=nullptr;
 #endif
   setFont(string);
   }
@@ -1100,6 +1104,8 @@ FXFont::FXFont(FXApp* a,const FXString& face,FXuint size,FXuint weight,FXuint sl
   font=nullptr;
 #ifdef WIN32
   dc=nullptr;
+#else
+  displayFont=nullptr;
 #endif
   }
 
@@ -1123,6 +1129,8 @@ FXFont::FXFont(FXApp* a,const FXFontDesc& fontdesc):FXId(a),wantedName(fontdesc.
   font=nullptr;
 #ifdef WIN32
   dc=nullptr;
+#else
+  displayFont=nullptr;
 #endif
   }
 
@@ -1172,17 +1180,18 @@ void FXFont::create(){
       // Override screen resolution via registry
       res=getApp()->reg().readUIntEntry("SETTINGS","screenres",100);
 
-      // NOTE: previously scaled `res` by getScale() here to get bigger glyphs
-      // "for free". Reverted: FXFont's own metrics (getFontHeight/getTextWidth)
-      // are queried throughout FOX's *logical* layout math (getDefaultWidth/
-      // Height etc.), so inflating the actual XftFont's pixel size also
-      // inflated those "logical" metrics -- then the geometry chokepoints
-      // (FXWindow::create/resize/...) scaled the resulting sizes *again*,
-      // double-scaling every text-influenced widget while others stayed
-      // single-scaled, corrupting layout. Properly scaling glyph size needs
-      // a font that renders bigger without lying about its logical metrics
-      // (e.g. a second, physically-scaled XftFont used only for drawing) --
-      // deferred; see PLAN.md Phase 2 item 5 / Phase 3.
+      // NOTE: an earlier version of this scaled `res` here directly to get
+      // bigger glyphs "for free". That's wrong: FXFont's own metrics
+      // (getFontHeight/getTextWidth) are queried throughout FOX's *logical*
+      // layout math (getDefaultWidth/Height etc.), so inflating `font`'s own
+      // pixel size also inflated those "logical" metrics -- then the
+      // geometry chokepoints (FXWindow::create/resize/...) scaled the
+      // resulting sizes *again*, double-scaling every text-influenced
+      // widget while others stayed single-scaled, corrupting layout.
+      // Instead, `font` stays logical (metrics stay correct) and a second
+      // XftFont, `displayFont`, is opened at the physically-scaled pixel
+      // size purely for drawing -- see FXDCWindow::drawText() (PLAN.md,
+      // Phase 2 item 5).
 
       FXTRACE((150,"%s::create: xft font\n",getClassName()));
 
@@ -1200,6 +1209,49 @@ void FXFont::create(){
 
       // Uh-oh, we failed
       if(!xid){ throw FXFontException("unable to create font"); }
+
+      // Open the physically-scaled display font used only for drawing (see
+      // note above). At scale=1 this is just `font` itself -- no separate
+      // resource, no separate FcMatch call. match() also mutates xid and
+      // the actual* metadata fields as a side effect (they describe
+      // whatever it last matched) -- save/restore them around the second
+      // call so they keep describing `font`, the logical one, exactly as
+      // if displayFont had never been created.
+      {
+      FXint scale=getApp()->getScale();
+      if(scale<=1){
+        displayFont=font;
+        }
+      else{
+        FXString savedActualName=actualName;
+        FXushort savedActualSize=actualSize;
+        FXushort savedActualWeight=actualWeight;
+        FXushort savedActualSlant=actualSlant;
+        FXushort savedActualSetwidth=actualSetwidth;
+        FXushort savedActualEncoding=actualEncoding;
+        FXushort savedFlags=flags;
+        void* disp=nullptr;
+        if(!family.empty()){
+          if(!foundry.empty()){
+            disp=match(family,foundry,wantedSize,wantedWeight,wantedSlant,wantedSetwidth,wantedEncoding,hints,res*scale);
+            }
+          if(!disp){
+            disp=match(family,FXString::null,wantedSize,wantedWeight,wantedSlant,wantedSetwidth,wantedEncoding,hints,res*scale);
+            }
+          }
+        // Fall back to the logical font rather than draw nothing if the
+        // scaled match somehow fails.
+        displayFont=disp?disp:font;
+        actualName=savedActualName;
+        actualSize=savedActualSize;
+        actualWeight=savedActualWeight;
+        actualSlant=savedActualSlant;
+        actualSetwidth=savedActualSetwidth;
+        actualEncoding=savedActualEncoding;
+        flags=savedFlags;
+        xid=(FXID)font;
+        }
+      }
 
 #else                           ///// XLFD /////
 
@@ -1321,6 +1373,11 @@ void FXFont::detach(){
 
 #elif defined(HAVE_XFT_H)       ///// XFT /////
 
+    // Prototype: displayFont is a second, physically-scaled XftFont used
+    // only for drawing (see PLAN.md, Phase 2 item 5); at scale=1 it's the
+    // same pointer as font, so don't close it twice.
+    if(displayFont && displayFont!=font){ XftFontClose(DISPLAY(getApp()),(XftFont*)displayFont); }
+    displayFont=nullptr;
     XftFontClose(DISPLAY(getApp()),(XftFont*)font);
 
 #else                           ///// XLFD /////
@@ -1363,6 +1420,11 @@ void FXFont::destroy(){
       freeElms(font);
 
 #elif defined(HAVE_XFT_H)       ///// XFT /////
+
+      // Prototype: see detach() above -- close displayFont too, unless
+      // it's the same pointer as font (scale=1).
+      if(displayFont && displayFont!=font){ XftFontClose(DISPLAY(getApp()),(XftFont*)displayFont); }
+      displayFont=nullptr;
 
       // Free font
       XftFontClose(DISPLAY(getApp()),(XftFont*)font);

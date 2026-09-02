@@ -2404,8 +2404,11 @@ void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   if(!surface){ fxerror("FXDCWindow::drawText: DC not connected to drawable.\n"); }
   if(!font){ fxerror("FXDCWindow::drawText: no font selected.\n"); }
 #ifdef HAVE_XFT_H
-  // Prototype: scale logical position to physical pixels (see PLAN.md, Phase 1);
-  // glyph size itself is scaled separately, via the font size (Phase 1 step 5).
+  // Prototype: scale logical position to physical pixels; glyphs render
+  // from font->displayFont, a second XftFont opened at the physically-
+  // scaled pixel size, so they come out bigger without font->font's own
+  // metrics (getFontHeight/getTextWidth, used throughout layout) lying
+  // about being logical (see PLAN.md, Phase 2 item 5).
   FXint scale=getApp()->getScale();
   XftColor color;
   color.pixel=devfg;
@@ -2413,7 +2416,7 @@ void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   color.color.green=FXGREENVAL(fg)*257;
   color.color.blue=FXBLUEVAL(fg)*257;
   color.color.alpha=FXALPHAVAL(fg)*257;
-  XftDrawStringUtf8((XftDraw*)xftDraw,&color,(XftFont*)font->font,x*scale,y*scale,(const FcChar8*)string,length);
+  XftDrawStringUtf8((XftDraw*)xftDraw,&color,(XftFont*)font->displayFont,x*scale,y*scale,(const FcChar8*)string,length);
 #else
   FXint count,escapement,defwidth,ww,size,i;
   FXdouble ang,ux,uy;
@@ -2461,6 +2464,12 @@ void FXDCWindow::drawImageText(FXint x,FXint y,const FXchar* string,FXuint lengt
   if(!surface){ fxerror("FXDCWindow::drawImageText: DC not connected to drawable.\n"); }
   if(!font){ fxerror("FXDCWindow::drawImageText: no font selected.\n"); }
 #ifdef HAVE_XFT_H
+  // Prototype: see drawText() above -- position scales, glyphs render from
+  // displayFont. extents come from measuring against displayFont too, so
+  // they're already physical-sized and need no further scaling; only the
+  // ascent (a font->font, i.e. logical, metric) needs scaling to match
+  // (see PLAN.md, Phase 2 item 5).
+  FXint scale=getApp()->getScale();
   XGlyphInfo extents;
   XftColor fgcolor,bgcolor;
   fgcolor.pixel=devfg;
@@ -2475,13 +2484,11 @@ void FXDCWindow::drawImageText(FXint x,FXint y,const FXchar* string,FXuint lengt
   bgcolor.color.alpha=FXALPHAVAL(bg)*257;
 
   // Area to blank
-  XftTextExtents8((Display*)getApp()->getDisplay(),(XftFont*)font->font,(const FcChar8*)string,length,&extents);
+  XftTextExtents8((Display*)getApp()->getDisplay(),(XftFont*)font->displayFont,(const FcChar8*)string,length,&extents);
 
   // Erase around text [FIXME wrong location]
-  XftDrawRect((XftDraw*)xftDraw,&bgcolor,x,y-font->getFontAscent(),extents.width,extents.height);
-//XftDrawRect((XftDraw*)xftDraw,&bgcolor,x+cache->xoff,y-xftfs->ascent,cache->x2off-cache->xoff,xftfs->ascent+xftfs->descent);
-//XftDrawRect((XftDraw*)xftDraw,&bgcolor,x+cache->xoff,y-((XftFont*)font->font)->ascent,cache->x2off-cache->xoff,((XftFont*)font->font)->ascent+((XftFont*)font->font)->descent);
-  XftDrawStringUtf8((XftDraw*)xftDraw,&fgcolor,(XftFont*)font->font,x,y,(const FcChar8*)string,length);
+  XftDrawRect((XftDraw*)xftDraw,&bgcolor,x*scale,y*scale-font->getFontAscent()*scale,extents.width,extents.height);
+  XftDrawStringUtf8((XftDraw*)xftDraw,&fgcolor,(XftFont*)font->displayFont,x*scale,y*scale,(const FcChar8*)string,length);
 #else
   FXint count,escapement,defwidth,ww,size,i;
   FXdouble ang,ux,uy;

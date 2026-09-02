@@ -118,6 +118,7 @@ FXDEFMAP(FXDesktopSetup) FXDesktopSetupMap[]={
   FXMAPFUNC(SEL_CHANGED,FXDesktopSetup::ID_COLORS,FXDesktopSetup::onColorChanged),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_COLOR_THEME,FXDesktopSetup::onColorTheme),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_CHOOSE_FONT,FXDesktopSetup::onChooseFont),
+  FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_CHOOSE_BITMAP_FONT,FXDesktopSetup::onChooseBitmapFont),
   FXMAPFUNC(SEL_CHANGED,FXDesktopSetup::ID_SELECT_FILEBINDING,FXDesktopSetup::onCmdFileBinding),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_SELECT_COMMAND,FXDesktopSetup::onCmdSelectCommand),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_SELECT_MIMETYPE,FXDesktopSetup::onCmdMimeType),
@@ -282,6 +283,8 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
 
   new FXLabel(hframe2,tr("Normal Font: "),nullptr,LAYOUT_CENTER_Y);
   fontbutton=new FXButton(hframe2," ",nullptr,this,ID_CHOOSE_FONT,LAYOUT_CENTER_Y|FRAME_RAISED|JUSTIFY_CENTER_X|JUSTIFY_CENTER_Y|LAYOUT_FILL_X);
+  bitmapfontbutton=new FXButton(hframe2,tr("Bitmap Font..."),nullptr,this,ID_CHOOSE_BITMAP_FONT,LAYOUT_CENTER_Y|FRAME_RAISED|JUSTIFY_CENTER_X|JUSTIFY_CENTER_Y);
+  bitmapfontbutton->setTipText(tr("Select a Windows .FON bitmap font file to use instead of an Xft font."));
 
   /// File Binding Panel ///
   FXVerticalFrame* vframe5=new FXVerticalFrame(switcher,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,0,0,0,0,0,0);
@@ -464,29 +467,35 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   FXSpinner* spinner14=new FXSpinner(matrix3,3,&target_barsize,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK);
   spinner14->setRange(5,100);
 
+  // UI scaling spinner (integer pixel scale factor, all FOX applications)
+  new FXLabel(matrix3,tr("UI Scaling"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
+  FXSpinner* spinner15=new FXSpinner(matrix3,3,&target_scale,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK);
+  spinner15->setRange(1,4);
+  spinner15->setTipText(tr("Integer pixel scale factor applied to all FOX applications (1 = normal size). Takes effect the next time an application starts."));
+
   // Xft hint style
   new FXLabel(matrix3,tr("Xft font hint style"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
-  FXListBox* list2=new FXListBox(matrix3,&target_hintstyle,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK|LAYOUT_TOP);
-  list2->fillItems(tr("None\nSlight\nMedium\nFull"));
-  list2->setNumVisible(4);
+  xftHintStyleList=new FXListBox(matrix3,&target_hintstyle,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK|LAYOUT_TOP);
+  xftHintStyleList->fillItems(tr("None\nSlight\nMedium\nFull"));
+  xftHintStyleList->setNumVisible(4);
 
   // Xft sub-pixel rendering
   new FXLabel(matrix3,tr("Xft font sub-pixel rendering"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
-  FXListBox* list3=new FXListBox(matrix3,&target_subpixel,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK|LAYOUT_TOP);
-  list3->fillItems(tr("Unknown\nRGB\nBGR\nVRGB\nVBGR\nNone"));
-  list3->setNumVisible(6);
+  xftSubpixelList=new FXListBox(matrix3,&target_subpixel,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK|LAYOUT_TOP);
+  xftSubpixelList->fillItems(tr("Unknown\nRGB\nBGR\nVRGB\nVBGR\nNone"));
+  xftSubpixelList->setNumVisible(6);
 
   // Xft font hinting
   new FXLabel(matrix3,tr("Xft font hinting"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
-  new FXCheckButton(matrix3,FXString::null,&target_hinting,FXDataTarget::ID_VALUE);
+  xftHintingCheck=new FXCheckButton(matrix3,FXString::null,&target_hinting,FXDataTarget::ID_VALUE);
 
   // Xft font autohint
   new FXLabel(matrix3,tr("Xft font autohint"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
-  new FXCheckButton(matrix3,FXString::null,&target_autohint,FXDataTarget::ID_VALUE);
+  xftAutohintCheck=new FXCheckButton(matrix3,FXString::null,&target_autohint,FXDataTarget::ID_VALUE);
 
   // Xft font anti-aliasing
   new FXLabel(matrix3,tr("Xft font anti-aliasing"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
-  new FXCheckButton(matrix3,FXString::null,&target_antialias,FXDataTarget::ID_VALUE);
+  xftAntialiasCheck=new FXCheckButton(matrix3,FXString::null,&target_antialias,FXDataTarget::ID_VALUE);
 
   // Close button etc.
   new FXSeparator(main,SEPARATOR_GROOVE|LAYOUT_FILL_X);
@@ -527,6 +536,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   dragDelta=getApp()->getDragDelta();
   wheelLines=getApp()->getWheelLines();
   barSize=getApp()->getScrollBarSize();
+  scale=getApp()->getScale();
   maxcolors=125;
   gamma=1.0;
 
@@ -564,6 +574,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   target_dragdelta.connect(dragDelta);
   target_wheellines.connect(wheelLines);
   target_barsize.connect(barSize);
+  target_scale.connect(scale);
   target_maxcolors.connect(maxcolors);
   target_gamma.connect(gamma);
   target_subpixel.connect(subpixel);
@@ -893,6 +904,18 @@ long FXDesktopSetup::onChooseFont(FXObject*,FXSelector,void*){
   return 1;
   }
 
+
+// Pick a Windows .FON bitmap font file to use instead of an Xft font
+long FXDesktopSetup::onChooseBitmapFont(FXObject*,FXSelector,void*){
+  FXString oldfile=fontspec;
+  FXString newfile=FXFileDialog::getOpenFilename(this,tr("Select Bitmap Font"),oldfile,tr("Bitmap Fonts (*.fon,*.FON)\nAll Files (*)"));
+  if(!newfile.empty()){
+    fontspec=newfile;
+    setupFont();
+    }
+  return 1;
+  }
+
 /*******************************************************************************/
 
 // Changed color, update sampler display
@@ -945,6 +968,29 @@ void FXDesktopSetup::setupFont(){
   menulabels[5]->setFont(font);
   textfield1->setFont(font);
   fontbutton->setText(fontspec);
+  updateFontControlsEnabled();
+  }
+
+
+// Grey out the Xft-only controls when the selected font is a bitmap
+// font (X11 core font or parsed .FON file) rather than an Xft font --
+// they have no effect on it either way (see FXFont::isBitmapFont()).
+void FXDesktopSetup::updateFontControlsEnabled(){
+  FXbool bitmap=font && font->isBitmapFont();
+  if(bitmap){
+    xftHintStyleList->disable();
+    xftSubpixelList->disable();
+    xftHintingCheck->disable();
+    xftAutohintCheck->disable();
+    xftAntialiasCheck->disable();
+    }
+  else{
+    xftHintStyleList->enable();
+    xftSubpixelList->enable();
+    xftHintingCheck->enable();
+    xftAutohintCheck->enable();
+    xftAntialiasCheck->enable();
+    }
   }
 
 
@@ -1271,6 +1317,9 @@ FXbool FXDesktopSetup::readSettingsFile(const FXString& file){
     wheelLines=desktopsettings.readIntEntry("SETTINGS","wheellines",getApp()->getWheelLines());
     barSize=desktopsettings.readIntEntry("SETTINGS","scrollbarsize",getApp()->getScrollBarSize());
 
+    // UI scaling
+    scale=desktopsettings.readIntEntry("SETTINGS","scale",getApp()->getScale());
+
     // Display tweaks
     maxcolors=desktopsettings.readUIntEntry("SETTINGS","maxcolors",125);
     gamma=desktopsettings.readRealEntry("SETTINGS","displaygamma",1.0);
@@ -1342,6 +1391,9 @@ FXbool FXDesktopSetup::writeSettingsFile(const FXString& file){
   desktopsettings.writeIntEntry("SETTINGS","dragdelta",dragDelta);
   desktopsettings.writeIntEntry("SETTINGS","wheellines",wheelLines);
   desktopsettings.writeIntEntry("SETTINGS","scrollbarsize",barSize);
+
+  // UI scaling
+  desktopsettings.writeIntEntry("SETTINGS","scale",scale);
 
   // Display tweaks
   desktopsettings.writeUIntEntry("SETTINGS","maxcolors",maxcolors);

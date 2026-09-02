@@ -98,9 +98,16 @@ private:
   FXTextField       *textfield1;
   FXButton          *button1;
   FXButton          *fontbutton;
+  FXButton          *bitmapfontbutton;
   FXSeparator       *sep1;
   FXSeparator       *sep2;
   FXSeparator       *sep3;
+private:
+  FXListBox         *xftHintStyleList;  // Promoted from locals so they can be greyed out
+  FXListBox         *xftSubpixelList;   // for a bitmap font (see updateFontControlsEnabled())
+  FXCheckButton     *xftHintingCheck;
+  FXCheckButton     *xftAutohintCheck;
+  FXCheckButton     *xftAntialiasCheck;
 private:
   ColorTheme         theme_current;     // Current Settings
   ColorTheme         theme_user;        // Theme User may have set, which is different from the other themes
@@ -125,6 +132,7 @@ private:
   FXint              dragDelta;
   FXint              wheelLines;
   FXint              barSize;
+  FXint              scale;              // Integer UI pixel scale factor, system-wide default
   FXfloat            gamma;
   FXint              subpixel;
   FXint              hintstyle;
@@ -155,6 +163,7 @@ private:
   FXDataTarget       target_dragdelta;          // Move mouse delta
   FXDataTarget       target_wheellines;         // Mouse wheel lines
   FXDataTarget       target_barsize;            // Scroll bar size
+  FXDataTarget       target_scale;              // Integer UI pixel scale factor
   FXDataTarget       target_maxcolors;          // Maximum colors
   FXDataTarget       target_gamma;              // Display gamma value
   FXDataTarget       target_subpixel;           // Xft font subpixel mode
@@ -167,6 +176,7 @@ private:
   FXDataTarget       target_iconpath;
 private:
   void setupFont();
+  void updateFontControlsEnabled();
   void initColors();
   void setupColors();
   void saveFileBinding();
@@ -183,6 +193,7 @@ public:
     ID_COLORS=FXMainWindow::ID_LAST,
     ID_COLOR_THEME,
     ID_CHOOSE_FONT,
+    ID_CHOOSE_BITMAP_FONT,
     ID_SELECT_COMMAND,
     ID_CREATE_FILEBINDING,
     ID_REMOVE_FILEBINDING,
@@ -200,6 +211,7 @@ public:
   long onColorChanged(FXObject*,FXSelector,void*);
   long onColorTheme(FXObject*,FXSelector,void*);
   long onChooseFont(FXObject*,FXSelector,void*);
+  long onChooseBitmapFont(FXObject*,FXSelector,void*);
   long onCmdFileBinding(FXObject*,FXSelector,void*);
   long onCmdMimeType(FXObject*,FXSelector,void*);
   long onCmdCreateFileBinding(FXObject*,FXSelector,void*);

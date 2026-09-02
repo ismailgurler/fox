@@ -1,5 +1,96 @@
 # FOX Toolkit Integer Pixel Scaling — Implementation Plan
 
+## Status (2026-09-02, latest)
+
+**In progress: ControlPanel (FOX Desktop Setup) integration.** Phases 1-3
+(including native .FON bitmap fonts, see below) are done and committed.
+Current work, requested by the user, adds two things to
+`controlpanel/ControlPanel.cpp`/`.h`:
+
+1. A "UI Scaling" numeric field in the **General** tab, backed by the new
+   `SETTINGS/scale` registry key (`b923980`, already committed and working
+   -- `FXApp::init()` reads it at startup).
+2. In the **Themes** tab, a way to pick a `.fon` bitmap font file (via
+   `FXFileDialog`, filtered `*.fon;*.FON`) alongside the existing "Choose
+   Font..." (Xft) button, and when a bitmap font is active, grey out the
+   Xft-only controls (hint style, sub-pixel, hinting/autohint/antialias
+   checkboxes) since they have no effect on a bitmap font.
+
+**Backend prerequisite work (all done and committed)**, in order:
+- `b923980` — `FXApp` reads `SETTINGS/scale` from the registry at
+  startup (`-scale` on the command line still wins if given).
+- `a6c341f` — new public `FXFont::isBitmapFont()` (true if either
+  `bitmapFont` or `fntFace` is set) -- this is what ControlPanel should
+  call to decide whether to grey out the Xft controls.
+- `59348b6` (Phase 3c) — native `.FON`/`.FNT` bitmap font parsing (see
+  below for detail). This is what makes "Themes: pick a .fon file" work:
+  `new FXFont(app, "/path/to/whatever.fon")` (comma-less string
+  constructor, already how `ControlPanel::fontspec` is used) now Just
+  Works for a real Windows bitmap font file, no different from how it
+  already worked for an X11 core font name.
+
+**Concrete next steps in ControlPanel.cpp/.h (not started yet)** --
+read `controlpanel/ControlPanel.cpp` around line 190 (Themes button),
+283-284 (existing `fontbutton`/`onChooseFont`/`ID_CHOOSE_FONT`), 467-489
+(the Xft controls in the General tab, currently *local* variables `list2`,
+`list3` plus two anonymous `FXCheckButton`s -- need to become member
+pointers to grey them out later), and 929-948 (`setupFont()`, where the
+sample widgets get the new font applied -- this is the natural place to
+also call an `updateFontControlsEnabled()` you'll add):
+
+1. `ControlPanel.h`: add `ID_CHOOSE_BITMAP_FONT` to the enum; declare
+   `long onChooseBitmapFont(FXObject*,FXSelector,void*);`; add member
+   pointers `FXButton *bitmapfontbutton;` and (promoted from locals)
+   `FXListBox *xftHintStyleList,*xftSubpixelList;`
+   `FXCheckButton *xftHintingCheck,*xftAutohintCheck,*xftAntialiasCheck;`;
+   add `FXDataTarget target_scale;` and an `FXint scale;` member (mirror
+   `dragDelta`/`wheelLines`).
+2. `ControlPanel.cpp` constructor: rename the local `list2`/`list3`/the
+   two checkbuttons at lines 469/475/481/485/489 to assign into the new
+   member pointers instead (`xftHintStyleList=new FXListBox(...)` etc.);
+   add a new `FXButton` next to `fontbutton` (~line 284) wired to
+   `ID_CHOOSE_BITMAP_FONT`; add the "UI Scaling" `FXSpinner` in `matrix3`
+   (General tab, near the other spinners ~line 452-465) bound to
+   `&target_scale,FXDataTarget::ID_VALUE`, range e.g. 1-4.
+3. `onChooseBitmapFont`: open `FXFileDialog` (see `onCmdSelectCommand`
+   around line ~1000s for the existing file-dialog pattern in this file to
+   match its style), filtered to `*.fon;*.FON` (or omit a filter and let
+   the user pick anything); on accept, set `fontspec=dialog.getFilename()`
+   and call `setupFont()` -- reuses the *existing* mechanism entirely,
+   since `new FXFont(getApp(),fontspec)` already treats a comma-less
+   string as either an X11 core font name or (now) a `.fon` path.
+4. `setupFont()`: after creating the new `font` and applying it to the
+   sample widgets, call a new `updateFontControlsEnabled()` that does
+   `FXbool bitmap=font->isBitmapFont(); xftHintStyleList->disable/enable();`
+   etc. for all 5 Xft widgets (disable() greys out in FOX).
+5. Registry load/save (constructor ~line 1225-1299, save ~line 1311-1371):
+   add `scale=desktopsettings.readIntEntry("SETTINGS","scale",1);` on
+   load and `desktopsettings.writeIntEntry("SETTINGS","scale",scale);` on
+   save, next to the existing General/Xft settings; connect
+   `target_scale.connect(scale);` alongside the other `target_*.connect()`
+   calls (~line 569-573).
+6. Build via the existing `controlpanel` CMake target (already builds
+   clean as of this session --
+   `cmake --build build --target ControlPanel`), then visually verify:
+   General tab shows the scale spinner and it persists across restarts;
+   Themes tab's bitmap-font picker loads a real `.fon` (there's one
+   already downloaded for testing, see below) and the Xft checkboxes grey
+   out immediately.
+
+**Test asset already on disk for this**: a real MS Sans Serif `.fon`,
+downloaded and validated earlier this session, at
+`/tmp/claude-1000/-home-ismail-Repos-fox-src/73b503d9-19cc-48da-a2cd-3b22997b44f5/scratchpad/sserife.fon`
+(session-scratchpad, may not survive to a new session -- if gone, re-fetch
+from `http://xyzzy.freeshell.org/sserife/sserife.fon`, confirmed a genuine
+NE-format Windows bitmap font resource, copyright string confirms
+"Microsoft Corp. 1998"). A minimal standalone test harness that
+loads/renders it (useful as a quick sanity check independent of
+ControlPanel) is at `.../scratchpad/fontest.cpp` in the same directory,
+build line in the Phase 3c commit message / near the end of this session's
+transcript.
+
+---
+
 ## Status (2026-09-02)
 
 Branch: `feature/integer-pixel-scaling`.

@@ -4285,6 +4285,7 @@ void FXApp::init(int& argc,char** argv,FXbool connect){
   const FXchar *str=nullptr;
   FXuint maxcols=0;
   FXint i,j;
+  FXbool scaleFromCmdLine=false;   // -scale given explicitly; don't let the registry default override it
 
   // Verify implementation invariants
   FXASSERT_STATIC(sizeof(FXuchar)==1);
@@ -4459,6 +4460,7 @@ void FXApp::init(int& argc,char** argv,FXbool connect){
         fxwarning("%s::init: expected integer value of 1 or greater.\n",getClassName());
         ::exit(1);
         }
+      scaleFromCmdLine=true;
       continue;
       }
 
@@ -4543,6 +4545,13 @@ void FXApp::init(int& argc,char** argv,FXbool connect){
   dragDelta=registry.readIntEntry("SETTINGS","dragdelta",dragDelta);
   wheelLines=registry.readIntEntry("SETTINGS","wheellines",wheelLines);
   scrollBarSize=registry.readIntEntry("SETTINGS","scrollbarsize",scrollBarSize);
+
+  // Prototype: integer pixel scale factor, system-wide default from the
+  // registry (set via ControlPanel's "UI Scaling" field); -scale on the
+  // command line, if given, takes precedence over it (see PLAN.md).
+  if(!scaleFromCmdLine){
+    scale=FXMAX(registry.readIntEntry("SETTINGS","scale",scale),1);
+    }
 
   // Load colors settings
   borderColor=registry.readColorEntry("SETTINGS","bordercolor",borderColor);

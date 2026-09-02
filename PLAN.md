@@ -83,18 +83,35 @@ Branch: `feature/integer-pixel-scaling`.
     scale=2; `tests/table` also verified at scale=3. This closes out item 5
     above (broad-enough coverage for now; still worth trying more apps as
     they come up).
-  - **Still open in Phase 2**: icon/image pixel content isn't resampled —
-    `FXImage`/`FXBitmap`/`FXIcon` need a nearest-neighbor upscale path.
-    Investigated this round: the clean approach is temporarily swapping in
-    an NxN-duplicated pixel buffer (and scaled width/height) right before
-    `FXImage::render()`/`FXBitmap::render()` run, so the existing ~20
-    format-specific renderers need no changes and XShm sizing stays
-    correct automatically — but `FXIcon`'s `shape`/`etch` masks (separate
-    `FXBitmap`-like objects that must stay pixel-aligned with the main
-    image) need the same treatment, and `FXBitmap`'s pixel data is bit-packed
-    (unlike `FXImage`'s `FXColor*`), adding real risk of subtle
-    stride/alignment bugs across three files I've only partially explored.
-    Deferred pending focused attention rather than rushed.
+  - **Icon/image pixel scaling (commit `665f409`)**: `FXImage`/`FXIcon`
+    pixmaps are now physically NxN pixel-doubled at scale>1 while
+    `width`/`height` stay logical. `FXImage::create()`/`resize()` scale the
+    `XCreatePixmap` size; `create()` temporarily swaps `data`/`width`/`height`
+    to a scaled buffer (via new `scalePixelsUp()`) right around the
+    `render()` call, so all ~20 existing format-specific renderers and XShm
+    sizing need no changes. `FXIcon::render()` turned out to compute its
+    `shape`/`etch` masks directly from the same `data`/`width`/`height` as
+    the color pixmap (not via a separate `FXBitmap`), so one swap keeps all
+    three pixel-aligned — no `FXBitmap` changes needed, which meaningfully
+    de-risked this compared to the investigation two updates ago.
+    `FXDCWindow::drawImage`/`drawIcon*` updated to copy at the now-larger
+    physical size. `drawBitmap` intentionally untouched (`FXBitmap`/stipple
+    patterns conventionally stay native-resolution). This closes out item 4
+    — the last big visible gap in Phase 2.
+    - **Known gap, not fixed**: `FXImage::restore()` (reads pixels back
+      from the pixmap into `data[]`) still uses unscaled `width`/`height`
+      against the now-larger pixmap, so it would read the wrong region.
+      Confirmed it's never called internally by the toolkit — opt-in
+      application API only (e.g. a screen-grab tool) — so ordinary
+      icon/image load-and-draw is unaffected. Fix it the same way as
+      `create()` if/when something needs it.
+    - Verified on Pathfinder (toolbar/tree/file-list icons visibly
+      pixel-doubled, correctly positioned) and `tests/iconlist` (large icon
+      view) at scale=2.
+  - **Remaining before Phase 2 can be called done**: glyph-size scaling
+    (below) is the only substantial piece left; the array/batch-primitive
+    edge cases and broader multi-app testing are lower-priority polish, not
+    blockers.
   - **Glyph-size scaling needs redoing**: a font that renders bigger without
     lying about its logical metrics — e.g. a second, physically-scaled
     `XftFont` used only for drawing, while the font object's metric-query

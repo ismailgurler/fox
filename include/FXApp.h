@@ -212,6 +212,7 @@ private:
   FXint            dragDelta;           // Minimum distance considered a move
   FXint            wheelLines;          // Scroll by this many lines
   FXint            scrollBarSize;       // Scrollbar size
+  FXint            scale;               // Integer pixel scale factor (logical -> physical)
   FXColor          borderColor;         // Border color
   FXColor          baseColor;           // Background color of GUI controls
   FXColor          hiliteColor;         // Highlight color of GUI controls
@@ -817,6 +818,10 @@ public:
   /// Access scroll bar slot size
   void setScrollBarSize(FXint size);
   FXint getScrollBarSize() const { return scrollBarSize; }
+
+  /// Access integer pixel scale factor (1=unscaled, 2=2x, 3=3x, ...)
+  void setScale(FXint s);
+  FXint getScale() const { return scale; }
 
   /// Obtain default colors
   FXColor getBorderColor() const { return borderColor; }

@@ -1949,7 +1949,9 @@ void FXDCWindow::drawEllipse(FXint x,FXint y,FXint w,FXint h){
 // Fill rectangle
 void FXDCWindow::fillRectangle(FXint x,FXint y,FXint w,FXint h){
   if(!surface){ fxerror("FXDCWindow::fillRectangle: DC not connected to drawable.\n"); }
-  XFillRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x,y,w,h);
+  // Prototype: scale logical coordinates to physical pixels (see PLAN.md, Phase 1)
+  FXint scale=getApp()->getScale();
+  XFillRectangle((Display*)getApp()->getDisplay(),surface->id(),(GC)ctx,x*scale,y*scale,w*scale,h*scale);
   }
 
 
@@ -2269,13 +2271,16 @@ void FXDCWindow::drawText(FXint x,FXint y,const FXchar* string,FXuint length){
   if(!surface){ fxerror("FXDCWindow::drawText: DC not connected to drawable.\n"); }
   if(!font){ fxerror("FXDCWindow::drawText: no font selected.\n"); }
 #ifdef HAVE_XFT_H
+  // Prototype: scale logical position to physical pixels (see PLAN.md, Phase 1);
+  // glyph size itself is scaled separately, via the font size (Phase 1 step 5).
+  FXint scale=getApp()->getScale();
   XftColor color;
   color.pixel=devfg;
   color.color.red=FXREDVAL(fg)*257;
   color.color.green=FXGREENVAL(fg)*257;
   color.color.blue=FXBLUEVAL(fg)*257;
   color.color.alpha=FXALPHAVAL(fg)*257;
-  XftDrawStringUtf8((XftDraw*)xftDraw,&color,(XftFont*)font->font,x,y,(const FcChar8*)string,length);
+  XftDrawStringUtf8((XftDraw*)xftDraw,&color,(XftFont*)font->font,x*scale,y*scale,(const FcChar8*)string,length);
 #else
   FXint count,escapement,defwidth,ww,size,i;
   FXdouble ang,ux,uy;

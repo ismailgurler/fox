@@ -728,6 +728,7 @@ FXApp::FXApp(const FXString& name,const FXString& vendor):registry(name,vendor){
   dragDelta=6;
   wheelLines=10;
   scrollBarSize=15;
+  scale=1;
 
   // Make font
 #if defined(HAVE_XFT_H)
@@ -3163,10 +3164,12 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
       case MotionNotify:
         event.type=SEL_MOTION;
         event.time=ev.xmotion.time;
-        event.win_x=ev.xmotion.x;
-        event.win_y=ev.xmotion.y;
-        event.root_x=ev.xmotion.x_root;
-        event.root_y=ev.xmotion.y_root;
+        // Prototype: X11 reports physical pixels; FOX widgets expect logical
+        // coordinates, so unscale here (see PLAN.md, Phase 1).
+        event.win_x=ev.xmotion.x/scale;
+        event.win_y=ev.xmotion.y/scale;
+        event.root_x=ev.xmotion.x_root/scale;
+        event.root_y=ev.xmotion.y_root/scale;
         event.code=0;
 
         // Mouse buttons and modifiers but no wheel buttons
@@ -3196,10 +3199,11 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
       case ButtonPress:
       case ButtonRelease:
         event.time=ev.xbutton.time;
-        event.win_x=ev.xbutton.x;
-        event.win_y=ev.xbutton.y;
-        event.root_x=ev.xbutton.x_root;
-        event.root_y=ev.xbutton.y_root;
+        // Prototype: unscale physical X11 coordinates back to logical (see PLAN.md, Phase 1)
+        event.win_x=ev.xbutton.x/scale;
+        event.win_y=ev.xbutton.y/scale;
+        event.root_x=ev.xbutton.x_root/scale;
+        event.root_y=ev.xbutton.y_root/scale;
 
         // Mouse buttons and modifiers but no wheel buttons
         event.state=(ev.xmotion.state&~(Button4Mask|Button5Mask)) | stickyMods;
@@ -3366,10 +3370,14 @@ FXbool FXApp::dispatchEvent(FXRawEvent& ev){
           ev.xconfigure.x=window->getX();
           ev.xconfigure.y=window->getY();
           }
-        event.rect.x=ev.xconfigure.x;
-        event.rect.y=ev.xconfigure.y;
-        event.rect.w=ev.xconfigure.width;
-        event.rect.h=ev.xconfigure.height;
+        // Prototype: X11 reports physical pixels; unscale back to logical
+        // before FOX records it as the window's own geometry (see PLAN.md,
+        // Phase 1) -- otherwise onConfigure() below would corrupt the
+        // logical xpos/ypos/width/height with physical values.
+        event.rect.x=ev.xconfigure.x/scale;
+        event.rect.y=ev.xconfigure.y/scale;
+        event.rect.w=ev.xconfigure.width/scale;
+        event.rect.h=ev.xconfigure.height/scale;
         event.synthetic=ev.xconfigure.send_event;
         if(window->handle(this,FXSEL(SEL_CONFIGURE,0),&event)) refresh();
         return true;
@@ -4399,6 +4407,20 @@ void FXApp::init(int& argc,char** argv,FXbool connect){
       maxcols=__strtoul(argv[j++]);
       if(maxcols<2 || maxcols>256){
         fxwarning("%s::init: expected value between 2 and 256.\n",getClassName());
+        ::exit(1);
+        }
+      continue;
+      }
+
+    // Set integer pixel scale factor
+    if(FXString::compare(argv[j],"-scale")==0){
+      if(++j>=argc){
+        fxwarning("%s:init: missing argument for -scale.\n",getClassName());
+        ::exit(1);
+        }
+      scale=__strtoul(argv[j++]);
+      if(scale<1){
+        fxwarning("%s::init: expected integer value of 1 or greater.\n",getClassName());
         ::exit(1);
         }
       continue;
@@ -5750,6 +5772,11 @@ void FXApp::setWheelLines(FXint lines){
 // Change scroll bar size
 void FXApp::setScrollBarSize(FXint size){
   scrollBarSize=size;
+  }
+
+// Change integer pixel scale factor
+void FXApp::setScale(FXint s){
+  scale=FXMAX(s,1);
   }
 
 

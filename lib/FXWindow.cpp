@@ -1373,8 +1373,20 @@ void FXWindow::create(){
 
       FXASSERT_STATIC(sizeof(FXID)>=sizeof(Window));
 
+      // Prototype: scale logical geometry to physical pixels at this one
+      // chokepoint (see PLAN.md, Phase 1). Everything else in FOX keeps
+      // working in logical xpos/ypos/width/height; only the X11 call sees
+      // physical pixels.
+      {
+      FXint scale=getApp()->getScale();
+      FXint physx=xpos*scale;
+      FXint physy=ypos*scale;
+      FXint physw=FXMAX(width,1)*scale;
+      FXint physh=FXMAX(height,1)*scale;
+
       // Finally, create the window
-      xid=XCreateWindow((Display*)getApp()->getDisplay(),parent->id(),xpos,ypos,FXMAX(width,1),FXMAX(height,1),0,visual->depth,InputOutput,(Visual*)visual->visual,mask,&wattr);
+      xid=XCreateWindow((Display*)getApp()->getDisplay(),parent->id(),physx,physy,physw,physh,0,visual->depth,InputOutput,(Visual*)visual->visual,mask,&wattr);
+      }
 
       // Uh-oh, we failed
       if(!xid){ throw FXWindowException("unable to create window."); }
@@ -2220,7 +2232,11 @@ void FXWindow::move(FXint x,FXint y){
 #ifdef WIN32
       SetWindowPos((HWND)xid,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_NOOWNERZORDER);
 #else
-      XMoveWindow((Display*)getApp()->getDisplay(),xid,x,y);
+      // Prototype: scale logical position to physical pixels (see PLAN.md, Phase 1)
+      {
+      FXint scale=getApp()->getScale();
+      XMoveWindow((Display*)getApp()->getDisplay(),xid,x*scale,y*scale);
+      }
 #endif
       if(flags&FLAG_DIRTY) layout();
       }
@@ -2252,7 +2268,11 @@ void FXWindow::position(FXint x,FXint y,FXint w,FXint h){
         if(shown() && (ow<=0 || oh<=0)){
           XMapWindow((Display*)getApp()->getDisplay(),xid);
           }
-        XMoveResizeWindow((Display*)getApp()->getDisplay(),xid,x,y,w,h);
+        // Prototype: scale logical geometry to physical pixels (see PLAN.md, Phase 1)
+        {
+        FXint scale=getApp()->getScale();
+        XMoveResizeWindow((Display*)getApp()->getDisplay(),xid,x*scale,y*scale,w*scale,h*scale);
+        }
         }
       else if(0<ow && 0<oh){
         XUnmapWindow((Display*)getApp()->getDisplay(),xid);
@@ -2288,7 +2308,11 @@ void FXWindow::resize(FXint w,FXint h){
         if(shown() && (ow<=0 || oh<=0)){
           XMapWindow((Display*)getApp()->getDisplay(),xid);
           }
-        XResizeWindow((Display*)getApp()->getDisplay(),xid,w,h);
+        // Prototype: scale logical geometry to physical pixels (see PLAN.md, Phase 1)
+        {
+        FXint scale=getApp()->getScale();
+        XResizeWindow((Display*)getApp()->getDisplay(),xid,w*scale,h*scale);
+        }
         }
       else if(0<ow && 0<oh){
         XUnmapWindow((Display*)getApp()->getDisplay(),xid);

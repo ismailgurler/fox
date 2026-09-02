@@ -1172,6 +1172,11 @@ void FXFont::create(){
       // Override screen resolution via registry
       res=getApp()->reg().readUIntEntry("SETTINGS","screenres",100);
 
+      // Prototype: scale the effective screen resolution so the resulting
+      // pixel size (res*wantedSize/720 in match()) comes out scaled, while
+      // wantedSize itself stays a logical point size (see PLAN.md, Phase 1).
+      res*=getApp()->getScale();
+
       FXTRACE((150,"%s::create: xft font\n",getClassName()));
 
       // Try to match with specified family and foundry

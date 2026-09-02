@@ -2310,7 +2310,17 @@ void FXApp::removeRepaints(FXID win,FXint x,FXint y,FXint w,FXint h){
   // Fish out the expose events and compound them
   while(XCheckMaskEvent((Display*)display,ExposureMask,&ev)){
     if(ev.xany.type==NoExpose) continue;
-    addRepaint(ev.xexpose.window,ev.xexpose.x,ev.xexpose.y,ev.xexpose.width,ev.xexpose.height,false);
+    // Prototype: same physical->logical unscale as in getNextEvent() (see
+    // PLAN.md, Phase 1/2) -- this is a second, independent place raw X11
+    // expose events enter the system, polling the connection directly
+    // rather than going through getNextEvent().
+    {
+    FXint ex0=ev.xexpose.x/scale;
+    FXint ey0=ev.xexpose.y/scale;
+    FXint ex1=(ev.xexpose.x+ev.xexpose.width+scale-1)/scale;
+    FXint ey1=(ev.xexpose.y+ev.xexpose.height+scale-1)/scale;
+    addRepaint(ev.xexpose.window,ex0,ey0,ex1-ex0,ey1-ey0,false);
+    }
     }
 
   // Then process events pertaining to window win and overlapping
@@ -2594,7 +2604,19 @@ a:ev.xany.type=0;
 
   // Event was repaint event; get next one
   if(ev.xany.type==Expose || ev.xany.type==GraphicsExpose){
-    addRepaint((FXID)ev.xexpose.window,ev.xexpose.x,ev.xexpose.y,ev.xexpose.width,ev.xexpose.height,false);
+    // Prototype: X11 reports physical pixels; the repaint bookkeeping
+    // below (and everyone downstream, including FXWindow::repaint()'s
+    // logical x/y/w/h) works in logical pixels, so unscale right here,
+    // at the one place raw expose events enter the system (see
+    // PLAN.md, Phase 1/2). We floor the origin and ceil width/height so
+    // the logical rectangle still fully covers the physical one.
+    {
+    FXint ex0=ev.xexpose.x/scale;
+    FXint ey0=ev.xexpose.y/scale;
+    FXint ex1=(ev.xexpose.x+ev.xexpose.width+scale-1)/scale;
+    FXint ey1=(ev.xexpose.y+ev.xexpose.height+scale-1)/scale;
+    addRepaint((FXID)ev.xexpose.window,ex0,ey0,ex1-ex0,ey1-ey0,false);
+    }
     goto a;
     }
 

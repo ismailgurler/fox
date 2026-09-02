@@ -1191,9 +1191,11 @@ void FXTopWindow::move(FXint x,FXint y){
       AdjustWindowRectEx(&rect,dwStyle,false,dwExStyle);        // Calculate based on *client* rectangle
       SetWindowPos((HWND)xid,nullptr,rect.left,rect.top,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOOWNERZORDER);
 #else
+      // Prototype: scale logical position to physical pixels (see PLAN.md, Phase 1/2)
+      FXint scale=getApp()->getScale();
       XWindowChanges cw;
-      cw.x=xpos;
-      cw.y=ypos;
+      cw.x=xpos*scale;
+      cw.y=ypos*scale;
       XReconfigureWMWindow(DISPLAY(getApp()),xid,DefaultScreen(DISPLAY(getApp())),CWX|CWY,&cw);
 #endif
       }
@@ -1215,13 +1217,15 @@ void FXTopWindow::resize(FXint w,FXint h){
       AdjustWindowRectEx(&rect,dwStyle,false,dwExStyle);        // Calculate based on *client* rectangle
       SetWindowPos((HWND)xid,nullptr,0,0,FXMAX(rect.right-rect.left,1),FXMAX(rect.bottom-rect.top,1),SWP_NOMOVE|SWP_NOZORDER|SWP_NOOWNERZORDER);
 #else
+      // Prototype: scale logical geometry to physical pixels (see PLAN.md, Phase 1/2)
+      FXint scale=getApp()->getScale();
       XWindowChanges changes;
       XSizeHints size;
       size.flags=USSize|PSize|PWinGravity|USPosition|PPosition;
-      size.x=xpos;
-      size.y=ypos;
-      size.width=width;
-      size.height=height;
+      size.x=xpos*scale;
+      size.y=ypos*scale;
+      size.width=width*scale;
+      size.height=height*scale;
       size.min_width=0;
       size.min_height=0;
       size.max_width=0;
@@ -1239,25 +1243,25 @@ void FXTopWindow::resize(FXint w,FXint h){
       if(!(options&DECOR_SHRINKABLE)){
         if(!(options&DECOR_STRETCHABLE)){                       // Cannot change at all
           size.flags|=PMinSize|PMaxSize;
-          size.min_width=size.max_width=width;
-          size.min_height=size.max_height=height;
+          size.min_width=size.max_width=width*scale;
+          size.min_height=size.max_height=height*scale;
           }
         else{                                                   // Cannot get smaller than default
           size.flags|=PMinSize;
-          size.min_width=getDefaultWidth();
-          size.min_height=getDefaultHeight();
+          size.min_width=getDefaultWidth()*scale;
+          size.min_height=getDefaultHeight()*scale;
           }
         }
       else if(!(options&DECOR_STRETCHABLE)){                    // Cannot get larger than default
         size.flags|=PMaxSize;
-        size.max_width=getDefaultWidth();
-        size.max_height=getDefaultHeight();
+        size.max_width=getDefaultWidth()*scale;
+        size.max_height=getDefaultHeight()*scale;
         }
       XSetWMNormalHints(DISPLAY(getApp()),xid,&size);
       changes.x=0;
       changes.y=0;
-      changes.width=width;
-      changes.height=height;
+      changes.width=width*scale;
+      changes.height=height*scale;
       changes.border_width=0;
       changes.sibling=None;
       changes.stack_mode=Above;
@@ -1285,13 +1289,15 @@ void FXTopWindow::position(FXint x,FXint y,FXint w,FXint h){
       AdjustWindowRectEx(&rect,dwStyle,false,dwExStyle);        // Calculate based on *client* rectangle
       SetWindowPos((HWND)xid,nullptr,rect.left,rect.top,FXMAX(rect.right-rect.left,1),FXMAX(rect.bottom-rect.top,1),SWP_NOZORDER|SWP_NOOWNERZORDER);
 #else
+      // Prototype: scale logical geometry to physical pixels (see PLAN.md, Phase 1/2)
+      FXint scale=getApp()->getScale();
       XWindowChanges changes;
       XSizeHints size;
       size.flags=USSize|PSize|PWinGravity|USPosition|PPosition;
-      size.x=xpos;
-      size.y=ypos;
-      size.width=width;
-      size.height=height;
+      size.x=xpos*scale;
+      size.y=ypos*scale;
+      size.width=width*scale;
+      size.height=height*scale;
       size.min_width=0;
       size.min_height=0;
       size.max_width=0;
@@ -1309,25 +1315,25 @@ void FXTopWindow::position(FXint x,FXint y,FXint w,FXint h){
       if(!(options&DECOR_SHRINKABLE)){
         if(!(options&DECOR_STRETCHABLE)){                       // Cannot change at all
           size.flags|=PMinSize|PMaxSize;
-          size.min_width=size.max_width=width;
-          size.min_height=size.max_height=height;
+          size.min_width=size.max_width=width*scale;
+          size.min_height=size.max_height=height*scale;
           }
         else{                                                   // Cannot get smaller than default
           size.flags|=PMinSize;
-          size.min_width=getDefaultWidth();
-          size.min_height=getDefaultHeight();
+          size.min_width=getDefaultWidth()*scale;
+          size.min_height=getDefaultHeight()*scale;
           }
         }
       else if(!(options&DECOR_STRETCHABLE)){                    // Cannot get larger than default
         size.flags|=PMaxSize;
-        size.max_width=getDefaultWidth();
-        size.max_height=getDefaultHeight();
+        size.max_width=getDefaultWidth()*scale;
+        size.max_height=getDefaultHeight()*scale;
         }
       XSetWMNormalHints(DISPLAY(getApp()),xid,&size);
-      changes.x=xpos;
-      changes.y=ypos;
-      changes.width=width;
-      changes.height=height;
+      changes.x=xpos*scale;
+      changes.y=ypos*scale;
+      changes.width=width*scale;
+      changes.height=height*scale;
       changes.border_width=0;
       changes.sibling=None;
       changes.stack_mode=Above;

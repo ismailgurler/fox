@@ -1172,10 +1172,17 @@ void FXFont::create(){
       // Override screen resolution via registry
       res=getApp()->reg().readUIntEntry("SETTINGS","screenres",100);
 
-      // Prototype: scale the effective screen resolution so the resulting
-      // pixel size (res*wantedSize/720 in match()) comes out scaled, while
-      // wantedSize itself stays a logical point size (see PLAN.md, Phase 1).
-      res*=getApp()->getScale();
+      // NOTE: previously scaled `res` by getScale() here to get bigger glyphs
+      // "for free". Reverted: FXFont's own metrics (getFontHeight/getTextWidth)
+      // are queried throughout FOX's *logical* layout math (getDefaultWidth/
+      // Height etc.), so inflating the actual XftFont's pixel size also
+      // inflated those "logical" metrics -- then the geometry chokepoints
+      // (FXWindow::create/resize/...) scaled the resulting sizes *again*,
+      // double-scaling every text-influenced widget while others stayed
+      // single-scaled, corrupting layout. Properly scaling glyph size needs
+      // a font that renders bigger without lying about its logical metrics
+      // (e.g. a second, physically-scaled XftFont used only for drawing) --
+      // deferred; see PLAN.md Phase 2 item 5 / Phase 3.
 
       FXTRACE((150,"%s::create: xft font\n",getClassName()));
 

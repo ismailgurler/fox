@@ -98,15 +98,27 @@ font. Fixed with a new `FXFont::isXftFont()` check. Not currently
 reachable (no app in this repo uses `glUseFXFont()`), so this was
 dormant, not an active bug.
 
+**`BitmapFontDialog` removed, `a91f887`.** Reversed the "keep it as a
+dedicated shortcut, not redundant" call from `b269a8a` -- the user
+pointed out that once `FXFontSelector` lists bitmap fonts (previous
+item), the ControlPanel-only dialog really is redundant after all.
+Removed `bitmapfontbutton`/`ID_CHOOSE_BITMAP_FONT`/`onChooseBitmapFont()`
+and `controlpanel/BitmapFontDialog.{h,cpp}` entirely. `fontbutton`
+itself was never touched by any of this work (still byte-identical to
+the pre-session code) -- it already had `LAYOUT_FILL_X`, so removing
+the second button from its row restored the original single-button
+layout with no code change needed there. Kept the "Bitmap Font Path"
+field/`SETTINGS/bitmapfontpath` -- still exactly what `FXFontSelector`'s
+own bitmap-font listing reads, just no longer tied to a now-removed
+dedicated dialog.
+
 **Nothing left in progress.** Everything above is committed and verified
 by direct interaction (screenshots), not just compiled. Next up is still
 Phase 4 polish (popups, drag corners, multi-monitor, GL canvases) --
-genuinely not started. Minor loose ends, none blocking: `BitmapFontDialog`
-still exists as ControlPanel's own dedicated shortcut alongside the now-
-merged `FXFontDialog` (deliberate, not redundant -- see `b269a8a`'s
-commit message); a bitmap family sharing its exact name with an installed
-Xft family would collapse into that Xft entry in the merged list (edge
-case, not hit in testing, noted in code).
+genuinely not started. One remaining loose end, not blocking: a bitmap
+family sharing its exact name with an installed Xft family would
+collapse into that Xft entry in the merged list (edge case, not hit in
+testing, noted in code).
 
 ---
 

@@ -287,6 +287,14 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   bitmapfontbutton=new FXButton(hframe2,tr("Bitmap Font..."),nullptr,this,ID_CHOOSE_BITMAP_FONT,LAYOUT_CENTER_Y|FRAME_RAISED|JUSTIFY_CENTER_X|JUSTIFY_CENTER_Y);
   bitmapfontbutton->setTipText(tr("Select a Windows .FON bitmap font file to use instead of an Xft font."));
 
+  // Bitmap font search path -- same ':'-separated, "~"-expanding convention as
+  // the Icon Search Path field below; consumed by BitmapFontDialog and by
+  // FXFontSelector's own bitmap-font listing (see FXFont::listBitmapFonts()).
+  FXHorizontalFrame* hframe2b=new FXHorizontalFrame(vframe4,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING);
+  new FXLabel(hframe2b,tr("Bitmap Font Path:"),nullptr,LAYOUT_CENTER_Y);
+  FXTextField* bitmapfontdirs=new FXTextField(hframe2b,2,&target_bitmapfontpath,FXDataTarget::ID_VALUE,LAYOUT_SIDE_LEFT|LAYOUT_FILL_X|LAYOUT_CENTER_Y|FRAME_SUNKEN|FRAME_THICK);
+  bitmapfontdirs->setTipText(tr("List of directories to search for Windows .FON bitmap font files."));
+
   /// File Binding Panel ///
   FXVerticalFrame* vframe5=new FXVerticalFrame(switcher,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,0,0,0,0,0,0);
 
@@ -534,6 +542,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   // Miscellaneous
   fontspec=getApp()->getNormalFont()->getFont();
   iconpath=FXIconCache::defaultIconPath;
+  bitmapfontpath=FXFont::defaultBitmapFontPath;
   dragDelta=getApp()->getDragDelta();
   wheelLines=getApp()->getWheelLines();
   barSize=getApp()->getScrollBarSize();
@@ -588,6 +597,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   target_filebinding_description.connect(filebinding.description);
   target_filebinding_command.connect(filebinding.command);
   target_iconpath.connect(iconpath);
+  target_bitmapfontpath.connect(bitmapfontpath);
   }
 
 
@@ -1323,6 +1333,9 @@ FXbool FXDesktopSetup::readSettingsFile(const FXString& file){
     // Icon search path
     iconpath=desktopsettings.readStringEntry("SETTINGS","iconpath",FXIconCache::defaultIconPath);
 
+    // Bitmap font search path
+    bitmapfontpath=desktopsettings.readStringEntry("SETTINGS","bitmapfontpath",FXFont::defaultBitmapFontPath);
+
     // Mouse tweaks
     dragDelta=desktopsettings.readIntEntry("SETTINGS","dragdelta",getApp()->getDragDelta());
     wheelLines=desktopsettings.readIntEntry("SETTINGS","wheellines",getApp()->getWheelLines());
@@ -1397,6 +1410,9 @@ FXbool FXDesktopSetup::writeSettingsFile(const FXString& file){
 
   // Icon search path
   desktopsettings.writeStringEntry("SETTINGS","iconpath",iconpath.text());
+
+  // Bitmap font search path
+  desktopsettings.writeStringEntry("SETTINGS","bitmapfontpath",bitmapfontpath.text());
 
   // Mouse tweaks
   desktopsettings.writeIntEntry("SETTINGS","dragdelta",dragDelta);

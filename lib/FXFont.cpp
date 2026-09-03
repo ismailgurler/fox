@@ -862,8 +862,14 @@ static FXbool fntListFile(const FXString& path,FXArray<FXBitmapFontEntry>& out){
   }
 
 
-// See declaration/contract in xfntface.h
-FXbool fxListBitmapFonts(const FXString& searchpath,FXArray<FXBitmapFontEntry>& out){
+// See declaration/contract in FXFont.h
+FXbool FXFont::isBitmapFontPath(const FXString& path){
+  return fntIsFonPath(path);
+  }
+
+
+// See declaration/contract in FXFont.h
+FXbool FXFont::listBitmapFonts(FXArray<FXBitmapFontEntry>& fonts,const FXString& searchpath){
   FXint beg=0,end=0;
   FXbool found=false;
   while(searchpath[end]){
@@ -875,12 +881,19 @@ FXbool fxListBitmapFonts(const FXString& searchpath,FXArray<FXBitmapFontEntry>& 
     FXString* files=nullptr;
     FXint nfiles=FXDir::listFiles(files,dir,"*.fon",FXDir::NoDirs|FXDir::CaseFold);
     for(FXint i=0; i<nfiles; i++){
-      if(fntListFile(FXPath::absolute(dir,files[i]),out)) found=true;
+      if(fntListFile(FXPath::absolute(dir,files[i]),fonts)) found=true;
       }
     delete [] files;
     }
   return found;
   }
+
+
+// Default search path for listBitmapFonts() -- the two locations
+// fontconfig itself treats as "manually installed fonts" (see PLAN.md,
+// Phase 4): a system-wide one (typically needs root to write to) and a
+// per-user one (doesn't).
+const FXchar FXFont::defaultBitmapFontPath[]="/usr/local/share/fonts:~/.local/share/fonts";
 
 /*******************************************************************************/
 
@@ -888,10 +901,14 @@ FXbool fxListBitmapFonts(const FXString& searchpath,FXArray<FXBitmapFontEntry>& 
 
 
 // Prototype (Phase 4): .fon support only exists in the Xft-enabled build
-// so far (see PLAN.md, Phase 3b) -- nothing to list here.
-FXbool fxListBitmapFonts(const FXString&,FXArray<FXBitmapFontEntry>&){
+// so far (see PLAN.md, Phase 3b) -- nothing to list/detect here.
+FXbool FXFont::isBitmapFontPath(const FXString&){
   return false;
   }
+FXbool FXFont::listBitmapFonts(FXArray<FXBitmapFontEntry>&,const FXString&){
+  return false;
+  }
+const FXchar FXFont::defaultBitmapFontPath[]="/usr/local/share/fonts:~/.local/share/fonts";
 
 
 #define SGN(x)        ((x)<-0.0005?"~":"")

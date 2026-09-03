@@ -11,42 +11,20 @@
 #ifndef BITMAPFONTDIALOG_H
 #define BITMAPFONTDIALOG_H
 
-// Mirrors FX::FXBitmapFontEntry and FX::fxListBitmapFonts() (lib/xfntface.h,
-// lib/FXFont.cpp) exactly -- name, namespace and layout. Both are internal
-// to libFOX (not an installed header), so they're re-declared here rather
-// than shared; this works because name mangling only encodes the
-// namespace-qualified name FX::FXBitmapFontEntry, not its member layout,
-// so this links against the real symbols in libFOX-1.7.a even though the
-// two declarations live in unrelated translation units (the same trick
-// used by the standalone test harness that first validated
-// fxListBitmapFonts() -- see PLAN.md, Phase 4). Keeping this dialog off
-// the public API on purpose (see class comment below), so duplicating one
-// small struct + one extern declaration is cheaper than promoting
-// library-internal types to public headers.
-namespace FX {
-struct FXBitmapFontEntry {
-  FXString path;
-  FXString family;
-  FXushort weight;
-  FXbool   italic;
-  FXushort points;
-  };
-extern FXbool fxListBitmapFonts(const FXString& searchpath,FXArray<FXBitmapFontEntry>& out);
-}
-using FX::FXBitmapFontEntry;
-
-// ControlPanel-only picker for Windows .FON/.FNT bitmap fonts: scans a
-// configured search path (see BitmapFontDialog.cpp) for .fon files, lists
-// the families/styles/sizes it finds (a single .fon can bundle several
-// point sizes, and Windows ships separate files per weight/style rather
-// than bundling those in one file), and shows a live preview -- mirroring
-// FXFontDialog's own family/style/size/preview layout, but for bitmap
-// fonts specifically.
+// ControlPanel-only picker for Windows .FON/.FNT bitmap fonts: scans
+// SETTINGS/bitmapfontpath (see FXFont::listBitmapFonts(), FXFont::
+// defaultBitmapFontPath) for .fon files, lists the families/styles/sizes
+// it finds (a single .fon can bundle several point sizes, and Windows
+// ships separate files per weight/style rather than bundling those in
+// one file), and shows a live preview -- mirroring FXFontDialog's own
+// family/style/size/preview layout, but for bitmap fonts specifically.
 //
-// Deliberately NOT folded into the shared FXFontSelector widget (that was
-// the original plan -- see PLAN.md, Phase 4) since that's toolkit-wide,
-// shared code every FOX app depends on; this one-off dialog is much lower
-// risk and keeps the blast radius inside controlpanel/.
+// FXFontSelector (the shared, toolkit-wide widget behind FXFontDialog)
+// now lists bitmap fonts too, alongside Xft ones, in the same merged
+// list -- see FXFontSelector.cpp. This dialog remains as ControlPanel's
+// own dedicated bitmap-only picker (its "Bitmap Font..." button is a
+// deliberate shortcut alongside the "Choose Font..." button, not a
+// second implementation of the same thing).
 class BitmapFontDialog : public FXDialogBox {
   FXDECLARE(BitmapFontDialog)
 protected:

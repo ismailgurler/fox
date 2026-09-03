@@ -14,18 +14,15 @@
 
 /*
   Notes:
-  - Search path is a plain compile-time default for now (see
-    BITMAPFONTPATH below) rather than a registry setting/UI field --
-    matching FXIconCache::defaultIconPath's "~" and PATHLISTSEP-separated
-    convention, but not (yet) exposed anywhere to change it. Worth adding
-    as a real ControlPanel General-tab setting (mirroring "Icon Search
-    Path") if this dialog turns out to be useful -- noted in PLAN.md.
-  - Family/style/size lists are built from a flat scan (fxListBitmapFonts)
-    each time the dialog opens; for the handful of .fon files anyone is
-    likely to have installed this is instant, so no caching.
+  - Search path defaults to SETTINGS/bitmapfontpath from the registry
+    (the same "Bitmap Font Search Path" field ControlPanel's General tab
+    now exposes), falling back to FXFont::defaultBitmapFontPath if unset --
+    same convention as FXFontSelector and the existing "Icon Search Path".
+  - Family/style/size lists are built from a flat scan
+    (FXFont::listBitmapFonts()) each time the dialog opens; for the
+    handful of .fon files anyone is likely to have installed this is
+    instant, so no caching.
 */
-
-#define BITMAPFONTPATH "/usr/local/share/fonts:~/.local/share/fonts"
 
 /*******************************************************************************/
 
@@ -46,7 +43,11 @@ BitmapFontDialog::BitmapFontDialog(FXWindow* owner,const FXString& title,const F
   FXDialogBox(owner,title,DECOR_TITLE|DECOR_BORDER|DECOR_RESIZE|DECOR_CLOSE,0,0,540,380,0,0,0,0),
   familyList(nullptr),styleList(nullptr),sizeList(nullptr),previewLabel(nullptr),previewFont(nullptr){
 
-  fxListBitmapFonts(searchpath.empty()?FXString(BITMAPFONTPATH):searchpath,entries);
+  FXString path=searchpath;
+  if(path.empty()){
+    path=getApp()->reg().readStringEntry("SETTINGS","bitmapfontpath",FXFont::defaultBitmapFontPath);
+    }
+  FXFont::listBitmapFonts(entries,path);
 
   FXVerticalFrame* main=new FXVerticalFrame(this,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,10,10,10,10);
 

@@ -24,6 +24,9 @@
 #ifndef FXID_H
 #include "FXId.h"
 #endif
+#ifndef FXARRAY_H
+#include "FXArray.h"
+#endif
 
 namespace FX {
 
@@ -126,6 +129,22 @@ struct FXFontDesc {
 
   /// Get string of font description
   FXString getFont() const;
+  };
+
+
+/// One discoverable Windows .FON/.FNT bitmap font "variant" -- a single
+/// (family, weight, italic, size) combination found by
+/// FXFont::listBitmapFonts(), e.g. for populating a font selection box
+/// alongside ordinary (Xft) fonts. `path` plus `points` (converted to
+/// deci-points, i.e. *10) is exactly what a plain "path,size" string
+/// passed to the FXFont(FXApp*,const FXString&) constructor needs to load
+/// it back -- see FXFont::isBitmapFontPath().
+struct FXBitmapFontEntry {
+  FXString path;        /// .fon file this came from
+  FXString family;      /// Face name, as embedded in the FNT resource (dfFace)
+  FXushort weight;      /// FXFont::Normal or FXFont::Bold
+  FXbool   italic;
+  FXushort points;      /// Whole points (not deci-points)
   };
 
 
@@ -445,6 +464,31 @@ public:
   * is the caller's responsibility to free this array using freeElms().
   */
   static FXbool listFonts(FXFontDesc*& fonts,FXuint& numfonts,const FXString& face,FXuint wt=0,FXuint sl=0,FXuint sw=0,FXuint en=0,FXuint h=0);
+
+  /// True if path names a Windows .FON/.FNT bitmap font file by extension
+  /// (".fon", case-insensitive) -- the same test the FXFont(FXApp*,const
+  /// FXString&) constructor uses to route a font spec to the native
+  /// bitmap parser instead of Xft. False (and no .fon support at all) in
+  /// a non-Xft (XLFD) build.
+  static FXbool isBitmapFontPath(const FXString& path);
+
+  /**
+  * Scan every "*.fon" file in each PATHLISTSEP-separated directory of
+  * searchpath (typically read from the SETTINGS/bitmapfontpath registry
+  * entry, falling back to defaultBitmapFontPath), appending one
+  * FXBitmapFontEntry per embedded FNT resource found to fonts (existing
+  * contents are kept -- caller's choice whether to fonts.clear() first).
+  * Returns true if at least one entry was found. Always false in a
+  * non-Xft (XLFD) build.
+  */
+  static FXbool listBitmapFonts(FXArray<FXBitmapFontEntry>& fonts,const FXString& searchpath);
+
+  /// Default ':'-separated search path for listBitmapFonts(), when no
+  /// SETTINGS/bitmapfontpath registry override is set -- the same two
+  /// locations fontconfig itself treats as "manually installed fonts"
+  /// (a system-wide one that typically needs root, and a per-user one
+  /// that doesn't).
+  static const FXchar defaultBitmapFontPath[];
 
   /// Save font data into stream
   virtual void save(FXStream& store) const;

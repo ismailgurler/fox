@@ -119,6 +119,7 @@ private:
   FXString           applicationname;   // If editing specific application settings
   FXString           vendorname;        // If editing specific vendor settings
   FXString           iconpath;          // Path where icons are found
+  FXString           bitmapfontpath;    // Path where .fon bitmap fonts are found
   FXTime             typingSpeed;
   FXTime             clickSpeed;
   FXTime             scrollSpeed;
@@ -174,6 +175,7 @@ private:
   FXDataTarget       target_filebinding_description;
   FXDataTarget       target_filebinding_command;
   FXDataTarget       target_iconpath;
+  FXDataTarget       target_bitmapfontpath;
 private:
   void setupFont();
   void updateFontControlsEnabled();

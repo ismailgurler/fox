@@ -1,5 +1,100 @@
 # FOX Toolkit Integer Pixel Scaling — Implementation Plan
 
+## Status (2026-09-03, even later — "Before Phase 4")
+
+Four follow-ups the user asked for explicitly, all done:
+
+1. **Registry-backed bitmap font search path.** `FXFont::listBitmapFonts()`/
+   `isBitmapFontPath()`/`defaultBitmapFontPath` and `FXBitmapFontEntry`
+   promoted from lib-internal `lib/xfntface.h` to the public
+   `include/FXFont.h` (`4b6797c`) -- needed once `FXFontSelector` (item 3
+   below) started consuming them directly. New `SETTINGS/bitmapfontpath`
+   registry entry (default `/usr/local/share/fonts:~/.local/share/fonts`,
+   `FXFont::defaultBitmapFontPath`) is the single source of truth for
+   where to scan, editable via a new "Bitmap Font Path" field on
+   ControlPanel's Themes tab -- mirrors "Icon Search Path" exactly
+   (colon-separated, `~`-expanding, same widget/FXDataTarget/load-save
+   pattern). Both `BitmapFontDialog` and `FXFontSelector` read it, falling
+   back to the default.
+2. **`SETTINGS/scale` persistence -- verified, no fix needed.** Launched
+   ControlPanel with no `-scale` flag; it opened at physical 2x with the
+   spinner correctly showing "2", read straight from a `scale=2` a
+   previous session had saved to `~/.config/fox.rc`. Works as designed.
+3. **The real `FXFontSelector` merge, `b269a8a`.** Bitmap fonts now show
+   up in the *shared* font-selection widget (behind `FXFontDialog`),
+   alongside Xft ones in one alphabetically-sorted list -- so any FOX app
+   using the standard font dialog gets bitmap-font picking for free, not
+   just ControlPanel's dedicated `BitmapFontDialog`. This was the
+   originally-planned approach, deferred earlier this session as "too
+   invasive" in favor of the ControlPanel-only dialog (`72666e0`) --
+   revisited because e.g. Adie had no other way to pick a bitmap font.
+   - `familylist` merges Xft families (`FXFont::listFonts()`) with unique
+     bitmap-font family names (`FXFont::listBitmapFonts()`) into one
+     `FXList::ascending`-sorted list. Bitmap entries are tagged with a
+     `BITMAP_FAMILY_MARKER` item-data sentinel (all-bits-set -- can't
+     collide with an Xft entry's data, always a small `FXFont` flags
+     combination) so `onCmdFamily()`/`listFontFaces()` can tell the two
+     kinds apart regardless of where sorting places them.
+   - `selected.face` holds a real `.fon` file path whenever the current
+     pick is a bitmap font (a bitmap "family" has no single loadable
+     name -- Windows ships separate files per weight/style, unlike Xft
+     where one family name covers everything). New `bitmapmode`/
+     `bitmapfamily` members, re-derived in `listFontFaces()` from whether
+     `selected.face` is a `.fon` path (`FXFont::isBitmapFontPath()`),
+     drive bitmap-specific branches in `listWeights()`/`listSlants()`/
+     `listFontSizes()` (filter the flat scan by family → weight → slant
+     instead of an Xft query) and `previewFont()` (resolve `selected.face`
+     to the exact file for the chosen weight/slant/size via
+     `resolveBitmapPath()` -- may differ from the file `onCmdFamily()`
+     seeded). `onCmdWeight`/`onCmdStyle`/`onCmdSize` needed *no* changes:
+     they already just read back list-item data in units
+     (`FXFont::Normal`/`Bold`, `Straight`/`Italic`, deci-points) the
+     bitmap branches now also populate.
+   - New `updateFilterEnabled()` greys the five Xft-only controls
+     (Character Set/Set Width/Pitch/Scalable/All Fonts) in bitmap mode --
+     same `isBitmapFont()`-driven pattern as ControlPanel's
+     `updateFontControlsEnabled()`.
+   - Verified end-to-end in Adie (Options > Font...): "Fixedsys" (from
+     the test `vgafix.fon`) appears correctly interleaved alphabetically
+     among Xft families; selecting it shows the one real weight/style/
+     size combination that file actually has (normal/regular/12.0); the
+     live preview renders genuine bitmap glyphs; the five Xft filter
+     controls grey out; picking an Xft font again re-enables them; Accept
+     applies the bitmap font to Adie's actual text editing area (screenshot-
+     confirmed crisp pixel glyphs in typed text). Also confirmed no
+     regression in ControlPanel's own "Choose Font..." (same
+     `FXFontDialog`), including at scale=2.
+4. **Hairline-border scale bug fixed everywhere else, `1a34896`.** Same
+   bug as the `FXFrame`/`FXToolTip` fix (`455c61c`): a stroked
+   `dc.drawRectangle()` is an X11 hairline, always 1 physical pixel
+   regardless of scale. Audited every other `dc.drawRectangle()` call in
+   the toolkit; fixed the genuine chrome/content borders (`FXPopup`,
+   `FXPacker`, `FXToolBarShell` -- each had their own copy of `FXFrame`'s
+   exact bug; `FXDial`, `FXCheckButton`, `FXColorList`, `FXFoldingList`/
+   `FXTreeList`, `FXMDIButton`, `FXMenuCheck`, `FXRulerView`, `FXText`'s
+   overstrike cursor, `FXIconList`'s lasso rectangle) using the same
+   four-filled-bands technique, via a general formula verified
+   pixel-identical to the original `drawRectangle` output at scale=1:
+   a stroked `drawRectangle(X,Y,W,H)` traces the same pixels as bands at
+   `(X,Y,W+1,1)`/`(X,Y+H,W+1,1)`/`(X,Y,1,H+1)`/`(X+W,Y,1,H+1)`.
+   Deliberately left alone: `FXDragCorner`'s resize-preview rectangle and
+   `FXMDIChild`'s drag-rubberband box -- both XOR-drawn (`BLT_SRC_XOR_DST`)
+   interactive overlays, conventionally thin regardless of scale, and
+   `FXMDIChild` already correctly uses a scaled `setLineWidth()` with a
+   matching inset.
+
+**Nothing left in progress.** Everything above is committed and verified
+by direct interaction (screenshots), not just compiled. Next up is still
+Phase 4 polish (popups, drag corners, multi-monitor, GL canvases) --
+genuinely not started. Minor loose ends, none blocking: `BitmapFontDialog`
+still exists as ControlPanel's own dedicated shortcut alongside the now-
+merged `FXFontDialog` (deliberate, not redundant -- see `b269a8a`'s
+commit message); a bitmap family sharing its exact name with an installed
+Xft family would collapse into that Xft entry in the merged list (edge
+case, not hit in testing, noted in code).
+
+---
+
 ## Status (2026-09-03, later)
 
 Follow-up session, four things the user raised after playing with the

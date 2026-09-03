@@ -41,6 +41,8 @@
 #include "FXRegistry.h"
 #include "FXIODevice.h"
 #include "FXFile.h"
+#include "FXPath.h"
+#include "FXDir.h"
 #include "FXFont.h"
 #include "xfntface.h"
 #include "FXEvent.h"
@@ -764,9 +766,132 @@ static FXbool fntIsFonPath(const FXString& path){
   return 4<=len && Ascii::toLower(path[len-4])=='.' && Ascii::toLower(path[len-3])=='f' && Ascii::toLower(path[len-2])=='o' && Ascii::toLower(path[len-1])=='n';
   }
 
+
+// Prototype (Phase 4): read just the identifying metadata (face name,
+// weight, italic, point size) from one FNT resource blob, without parsing
+// glyph data -- much cheaper than fntParseResource() when all we want is
+// "what fonts are in this file", for FXFontSelector's family list. Field
+// offsets are the same fixed FNT header used by fntParseResource() above
+// (dfItalic @0x50, dfWeight @0x53, dfFace @0x69 -- a DWORD offset from the
+// start of this resource to a NUL-terminated face name string); see
+// PLAN.md, Phase 3b for how those offsets were derived/verified.
+static FXbool fntResourceMeta(const FXuchar* res,FXuint reslen,FXString& face,FXushort& weight,FXbool& italic,FXushort& points){
+  FXushort version=0;
+  if(!fntGet(res,reslen,0x00,version)) return false;
+  if(version!=0x0200 && version!=0x0300) return false;
+  FXuchar type=0;
+  if(0x42+2>reslen) return false;
+  fntGet(res,reslen,0x42,type);
+  if(type&0x01) return false;                              // vector font, not bitmap
+  FXushort pts=0;
+  if(!fntGet(res,reslen,0x44,pts) || pts==0) return false;
+  if(0x51>reslen) return false;
+  FXuchar italicbyte=res[0x50];
+  FXushort wt=0;
+  fntGet(res,reslen,0x53,wt);
+  FXuint faceoff=0;
+  if(!fntGet(res,reslen,0x69,faceoff) || reslen<=faceoff) return false;
+  FXuint p=faceoff;
+  while(p<reslen && res[p]!=0 && (p-faceoff)<128) p++;
+  if(p==faceoff) return false;                              // empty face name
+  face.assign((const FXchar*)(res+faceoff),p-faceoff);
+  weight=(600<=wt)?FXFont::Bold:FXFont::Normal;              // Windows dfWeight: 400=normal, 700=bold
+  italic=(italicbyte!=0);
+  points=pts;
+  return true;
+  }
+
+
+// Prototype (Phase 4): walk one .FON file's NE resource table (same layout
+// fntLoad() walks above) but, instead of picking the single closest-size
+// match, collect metadata for *every* RT_FONT resource found, appending
+// each to *out/numout. Returns true if at least one was added.
+static FXbool fntListFile(const FXString& path,FXArray<FXBitmapFontEntry>& out){
+  FXFile file(path,FXIO::Reading);
+  if(!file.isOpen()) return false;
+  FXlong sz=file.size();
+  if(sz<=0 || 0x40000000<sz) return false;                  // sanity cap, 1GB
+  FXuchar* filedata;
+  if(!allocElms(filedata,(FXuint)sz)) return false;
+  if(file.readBlock(filedata,sz)!=sz){ freeElms(filedata); return false; }
+
+  FXbool found=false;
+  FXuint fsize=(FXuint)sz;
+  FXuint ne_off=0;
+  if(fntGet(filedata,fsize,0x3C,ne_off) && (FXuint)(ne_off+2)<=fsize && filedata[ne_off]=='N' && filedata[ne_off+1]=='E'){
+    FXushort ne_rsrctab=0;
+    if(fntGet(filedata,fsize,ne_off+0x24,ne_rsrctab)){
+      FXuint rsrc_off=ne_off+ne_rsrctab;
+      FXushort alignShift=0;
+      if(fntGet(filedata,fsize,rsrc_off,alignShift)){
+        FXuint p=rsrc_off+2;
+        while(p+8<=fsize){
+          FXushort rtTypeID=0,rtResourceCount=0;
+          if(!fntGet(filedata,fsize,p,rtTypeID) || !fntGet(filedata,fsize,p+2,rtResourceCount)) break;
+          p+=8;
+          if(rtTypeID==0) break;
+          for(FXushort i=0; i<rtResourceCount; i++){
+            if(p+12>fsize) break;
+            FXushort rnOffset=0,rnLength=0;
+            fntGet(filedata,fsize,p,rnOffset);
+            fntGet(filedata,fsize,p+2,rnLength);
+            p+=12;
+            if(rtTypeID==0x8008){                            // RT_FONT
+              FXuint roff=((FXuint)rnOffset)<<alignShift;
+              FXuint rlen=((FXuint)rnLength)<<alignShift;
+              if(roff+rlen<=fsize && rlen>=0x76){
+                FXString face; FXushort weight=0,points=0; FXbool italic=false;
+                if(fntResourceMeta(filedata+roff,rlen,face,weight,italic,points)){
+                  FXBitmapFontEntry entry;
+                  entry.path=path;
+                  entry.family=face;
+                  entry.weight=weight;
+                  entry.italic=italic;
+                  entry.points=points;
+                  if(out.push(entry)) found=true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  freeElms(filedata);
+  return found;
+  }
+
+
+// See declaration/contract in xfntface.h
+FXbool fxListBitmapFonts(const FXString& searchpath,FXArray<FXBitmapFontEntry>& out){
+  FXint beg=0,end=0;
+  FXbool found=false;
+  while(searchpath[end]){
+    while(searchpath[end]==PATHLISTSEP) end++;
+    beg=end;
+    while(searchpath[end] && searchpath[end]!=PATHLISTSEP) end++;
+    if(beg==end) break;
+    FXString dir=FXPath::expand(searchpath.mid(beg,end-beg));
+    FXString* files=nullptr;
+    FXint nfiles=FXDir::listFiles(files,dir,"*.fon",FXDir::NoDirs|FXDir::CaseFold);
+    for(FXint i=0; i<nfiles; i++){
+      if(fntListFile(FXPath::absolute(dir,files[i]),out)) found=true;
+      }
+    delete [] files;
+    }
+  return found;
+  }
+
 /*******************************************************************************/
 
 #else ///////////////////////////////// XLFD ////////////////////////////////////
+
+
+// Prototype (Phase 4): .fon support only exists in the Xft-enabled build
+// so far (see PLAN.md, Phase 3b) -- nothing to list here.
+FXbool fxListBitmapFonts(const FXString&,FXArray<FXBitmapFontEntry>&){
+  return false;
+  }
 
 
 #define SGN(x)        ((x)<-0.0005?"~":"")

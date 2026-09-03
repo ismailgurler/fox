@@ -83,6 +83,21 @@ Four follow-ups the user asked for explicitly, all done:
    `FXMDIChild` already correctly uses a scaled `setLineWidth()` with a
    matching inset.
 
+**One small follow-up, `53173dd`**: the user asked whether our `.FON`
+work relates to FOX 1.3.19's changelog entry "Added support for Xft in
+glUseFXFont()". Answer: unrelated axes -- `glUseFXFont()` is about
+building OpenGL display-list bitmaps for text in a *GL canvas*
+(glyph *rendering target*), while our work is about the glyph *source
+format* (parsing `.FON` files, rendered through the ordinary 2D path).
+But checking it surfaced a real latent bug: `glUseFXFont()`
+unconditionally cast `font->id()` to `XftFont*` on the Xft build --
+for a `.fon`-backed font, `id()` is actually our own internal parser
+handle, not an `XftFont*`, so this was undefined behavior (likely a
+crash) waiting to happen the first time any app called it on a bitmap
+font. Fixed with a new `FXFont::isXftFont()` check. Not currently
+reachable (no app in this repo uses `glUseFXFont()`), so this was
+dormant, not an active bug.
+
 **Nothing left in progress.** Everything above is committed and verified
 by direct interaction (screenshots), not just compiled. Next up is still
 Phase 4 polish (popups, drag corners, multi-monitor, GL canvases) --

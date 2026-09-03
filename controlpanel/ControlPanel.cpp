@@ -21,6 +21,7 @@
 #include <xincs.h>
 #include <fx.h>
 #include "ControlPanel.h"
+#include "BitmapFontDialog.h"
 #include "icons.h"
 
 // Place to look for executables
@@ -907,11 +908,21 @@ long FXDesktopSetup::onChooseFont(FXObject*,FXSelector,void*){
 
 // Pick a Windows .FON bitmap font file to use instead of an Xft font
 long FXDesktopSetup::onChooseBitmapFont(FXObject*,FXSelector,void*){
-  FXString oldfile=fontspec;
-  FXString newfile=FXFileDialog::getOpenFilename(this,tr("Select Bitmap Font"),oldfile,tr("Bitmap Fonts (*.fon,*.FON)\nAll Files (*)"));
-  if(!newfile.empty()){
-    fontspec=newfile;
-    setupFont();
+  BitmapFontDialog dialog(this,tr("Select Bitmap Font"),FXString::null);
+  if(dialog.haveFonts()){
+    dialog.setFontSpec(fontspec);
+    if(dialog.execute(PLACEMENT_OWNER)){
+      fontspec=dialog.getFontSpec();
+      setupFont();
+      }
+    }
+  else{
+    // Nothing found on the default search path (see BitmapFontDialog.cpp) -- fall back to a plain file browser.
+    FXString newfile=FXFileDialog::getOpenFilename(this,tr("Select Bitmap Font"),fontspec,tr("Bitmap Fonts (*.fon,*.FON)\nAll Files (*)"));
+    if(!newfile.empty()){
+      fontspec=newfile;
+      setupFont();
+      }
     }
   return 1;
   }

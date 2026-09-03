@@ -711,7 +711,14 @@ FXbool glUseFXFont(FXFont* font,int first,int count,int list){
 #else
   if(glXGetCurrentContext()){
 #ifdef HAVE_XFT_H                       // Using XFT
-    result=glXUseXftFont((XftFont*)font->id(),first,count,list);
+    // id() is overloaded to mean different things depending on how this
+    // FXFont was actually matched (see FXFont::create()): for a parsed
+    // .FON/.FNT bitmap font (no Xft font at all) it's our own internal
+    // parser handle, not an XftFont* -- fail cleanly here instead of
+    // handing glXUseXftFont() an unrelated pointer (see PLAN.md).
+    if(font->isXftFont()){
+      result=glXUseXftFont((XftFont*)font->id(),first,count,list);
+      }
 #else                                   // Using XLFD
     glXUseXFont((Font)font->id(),first,count,list);
     result=true;

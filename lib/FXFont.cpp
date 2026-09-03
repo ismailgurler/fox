@@ -2053,6 +2053,16 @@ FXbool FXFont::isBitmapFont() const {
   }
 
 
+// See declaration/contract in FXFont.h
+FXbool FXFont::isXftFont() const {
+#if !defined(WIN32) && defined(HAVE_XFT_H)
+  return font!=nullptr;
+#else
+  return false;
+#endif
+  }
+
+
 // Get font width
 FXint FXFont::getFontWidth() const {
   if(xid){

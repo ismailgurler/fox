@@ -390,6 +390,16 @@ public:
   /// effect on such a font -- see PLAN.md, Phase 3.
   FXbool isBitmapFont() const;
 
+  /// True if id() is a real XftFont* (i.e. this font matched through Xft --
+  /// still true for an isBitmapFont() X11-core font loaded by name, e.g.
+  /// "9x15", since that keeps a parallel Xft match alongside it; false for
+  /// a parsed .FON/.FNT file, which has no Xft font at all). Xft-specific
+  /// code that casts id() to XftFont* -- glUseFXFont(), for one -- needs
+  /// to check this first to avoid treating an unrelated pointer (id() is
+  /// simply overloaded to mean different things per font backend) as an
+  /// XftFont*. Always false outside an Xft build.
+  FXbool isXftFont() const;
+
   /// See if font has glyph for ch
   virtual FXbool hasChar(FXwchar ch) const;
 

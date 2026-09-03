@@ -1,5 +1,92 @@
 # FOX Toolkit Integer Pixel Scaling — Implementation Plan
 
+## Status (2026-09-03, later)
+
+Follow-up session, four things the user raised after playing with the
+`73ddd30` ControlPanel build:
+
+1. **`.FON` parsing is on the fly, not cached** -- confirmed by reading
+   `fntLoad()`: it re-reads and re-parses the whole file from disk every
+   `FXFont::create()`. No cache at any level. Fine for ControlPanel's
+   usage; worth knowing if a `.fon`-backed font ever lands in a hot path.
+
+2. **Real bitmap font picker, `19e5d30`.** Original plan was to fold
+   bitmap fonts into the shared `FXFontSelector` widget so every FOX app
+   benefits -- started down that path (see `72666e0`'s message for the
+   detour), but the user redirected: too invasive for the win, keep it
+   ControlPanel-only. Landed as:
+   - `fxListBitmapFonts()` (`72666e0`, `lib/xfntface.h` + `FXFont.cpp`):
+     scans a `PATHLISTSEP`-separated search path for `*.fon` files and
+     extracts family/weight/italic/points from *every* embedded FNT
+     resource (not just the closest-size match `fntLoad()` picks) --
+     cheap, no glyph data touched. Real bug hit and fixed: `FXBitmapFontEntry`
+     holds `FXString`s, so the usual `allocElms`/`resizeElms` (POD-only,
+     no ctor/dtor) segfaulted -- switched to `FXArray<T>`, which does
+     construct/destruct elements.
+   - `controlpanel/BitmapFontDialog.{h,cpp}` (`19e5d30`): a small
+     `FXDialogBox` with Family/Style/Size list columns and a live preview
+     label, in the same spirit as `FXFontDialog` but for `.fon` files.
+     Resolves the selection to a `"path,deci-points"` spec string, which
+     turns out to already round-trip through `FXFont::setFont()`
+     unchanged (it truncates `wantedName` at the first comma *before* the
+     `.fon`-suffix check) -- no FXFont-side changes needed for this part.
+     `FXBitmapFontEntry`/`fxListBitmapFonts()` are re-declared locally in
+     the header rather than sharing `lib/xfntface.h` (library-internal,
+     not installed) -- works because linking only cares about the
+     mangled (namespace-qualified) name, not the struct's actual
+     definition site; the same trick a throwaway test harness used first
+     to validate the scan function stand-alone.
+   - Search path is a compile-time default for now
+     (`/usr/local/share/fonts:~/.local/share/fonts`,
+     `BitmapFontDialog.cpp`'s `BITMAPFONTPATH`) -- **not yet** a registry
+     setting/UI field. Cheap follow-up if this dialog earns its keep:
+     mirror the existing "Icon Search Path" field exactly.
+   - Verified end-to-end against two real downloaded fonts (MS Sans
+     Serif/6 sizes, Fixedsys/1 size): family→style→size cascade, live
+     preview, round-trip into `setupFont()`, Xft-controls greyout all
+     confirmed via screenshots.
+   - **Not done, explicitly deferred**: folding bitmap-font listing into
+     the shared `FXFontSelector` widget itself (the original plan) --
+     would need `FXFontDesc` (or a parallel path) to carry a bitmap
+     font's file path/resource choice through `FXFontSelector`'s
+     family/weight/style/size lists and `previewFont()`, touching code
+     every FOX app depends on. Worth reconsidering only if
+     `BitmapFontDialog` proves genuinely useful and the ROI justifies
+     the shared-widget risk.
+
+3. **Font-selector field semantics, and multi-size/style `.fon`
+   support** -- explained to the user (Character Set/Set Width/Pitch/
+   Scalable/All Fonts are Xft/fontconfig-only concepts, don't apply to
+   `.fon`), and this turned out to already be the crux of item 2 above:
+   `fntLoad()` only ever loads *one* resource (closest size); a `.fon`
+   can bundle several sizes (confirmed: `sserife.fon` here has 6), and
+   Windows ships separate *files* per weight/style rather than bundling
+   those (this test file only has Regular). `fxListBitmapFonts()` /
+   `BitmapFontDialog` are what now expose the full set to the user.
+
+4. **Two real scale>1 rendering bugs found and fixed, `455c61c`**:
+   - `FXWindow::scroll()`'s `XCopyArea` blit used its caller's *logical*
+     coordinates directly against the *physical*-sized window -- correct
+     only at scale=1. Visible as artifacts scrolling a long dropdown
+     list (e.g. the Theme combo). The `addRepaint()` calls in the same
+     function were already correctly logical (that contract dates to
+     Phase 1/2's expose-event handling) and needed no change -- only the
+     raw `XCopyArea` call needed `*scale`.
+   - `FXFrame::drawBorderRectangle()` / `FXToolTip::onPaint()`: `FRAME_LINE`
+     borders and the real tooltip popup border were both a single
+     stroked `dc.drawRectangle()` -- an X11 "hairline", always exactly 1
+     *physical* pixel regardless of scale (unlike the filled-band borders
+     every sibling frame style already uses). Tried `dc.setLineWidth()`
+     first -- not enough, since X11 centers a stroke on its path, so half
+     of a scaled-width stroke drawn at a widget's own edge falls outside
+     its bounds and gets clipped by whatever's next to it. Fixed by
+     building the border from four filled bands instead, matching the
+     existing sibling styles. Confirmed via pixel-level screenshot
+     diffing: exactly `N*scale` physical pixels, fully contained, at both
+     scale=1 (no regression) and scale=2.
+
+---
+
 ## Status (2026-09-03, latest)
 
 **Done: ControlPanel (FOX Desktop Setup) integration** (`73ddd30`). Built

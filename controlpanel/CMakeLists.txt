@@ -3,8 +3,8 @@ set(FOX_LIBRARIES FOX)
 set(FOX_INCLUDE_DIRS $<TARGET_PROPERTY:FOX,INTERFACE_INCLUDE_DIRECTORIES>)
 
 set(TARGET_NAME ControlPanel)
-set(SOURCES ControlPanel.cpp BitmapFontDialog.cpp icons.cpp)
-set(HEADERS ControlPanel.h BitmapFontDialog.h icons.h)
+set(SOURCES ControlPanel.cpp icons.cpp)
+set(HEADERS ControlPanel.h icons.h)
 
 set(ICONS controlpanel_gif.gif
   colors_gif.gif

@@ -98,7 +98,6 @@ private:
   FXTextField       *textfield1;
   FXButton          *button1;
   FXButton          *fontbutton;
-  FXButton          *bitmapfontbutton;
   FXSeparator       *sep1;
   FXSeparator       *sep2;
   FXSeparator       *sep3;
@@ -195,7 +194,6 @@ public:
     ID_COLORS=FXMainWindow::ID_LAST,
     ID_COLOR_THEME,
     ID_CHOOSE_FONT,
-    ID_CHOOSE_BITMAP_FONT,
     ID_SELECT_COMMAND,
     ID_CREATE_FILEBINDING,
     ID_REMOVE_FILEBINDING,
@@ -213,7 +211,6 @@ public:
   long onColorChanged(FXObject*,FXSelector,void*);
   long onColorTheme(FXObject*,FXSelector,void*);
   long onChooseFont(FXObject*,FXSelector,void*);
-  long onChooseBitmapFont(FXObject*,FXSelector,void*);
   long onCmdFileBinding(FXObject*,FXSelector,void*);
   long onCmdMimeType(FXObject*,FXSelector,void*);
   long onCmdCreateFileBinding(FXObject*,FXSelector,void*);

@@ -21,7 +21,6 @@
 #include <xincs.h>
 #include <fx.h>
 #include "ControlPanel.h"
-#include "BitmapFontDialog.h"
 #include "icons.h"
 
 // Place to look for executables
@@ -119,7 +118,6 @@ FXDEFMAP(FXDesktopSetup) FXDesktopSetupMap[]={
   FXMAPFUNC(SEL_CHANGED,FXDesktopSetup::ID_COLORS,FXDesktopSetup::onColorChanged),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_COLOR_THEME,FXDesktopSetup::onColorTheme),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_CHOOSE_FONT,FXDesktopSetup::onChooseFont),
-  FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_CHOOSE_BITMAP_FONT,FXDesktopSetup::onChooseBitmapFont),
   FXMAPFUNC(SEL_CHANGED,FXDesktopSetup::ID_SELECT_FILEBINDING,FXDesktopSetup::onCmdFileBinding),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_SELECT_COMMAND,FXDesktopSetup::onCmdSelectCommand),
   FXMAPFUNC(SEL_COMMAND,FXDesktopSetup::ID_SELECT_MIMETYPE,FXDesktopSetup::onCmdMimeType),
@@ -284,12 +282,11 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
 
   new FXLabel(hframe2,tr("Normal Font: "),nullptr,LAYOUT_CENTER_Y);
   fontbutton=new FXButton(hframe2," ",nullptr,this,ID_CHOOSE_FONT,LAYOUT_CENTER_Y|FRAME_RAISED|JUSTIFY_CENTER_X|JUSTIFY_CENTER_Y|LAYOUT_FILL_X);
-  bitmapfontbutton=new FXButton(hframe2,tr("Bitmap Font..."),nullptr,this,ID_CHOOSE_BITMAP_FONT,LAYOUT_CENTER_Y|FRAME_RAISED|JUSTIFY_CENTER_X|JUSTIFY_CENTER_Y);
-  bitmapfontbutton->setTipText(tr("Select a Windows .FON bitmap font file to use instead of an Xft font."));
 
   // Bitmap font search path -- same ':'-separated, "~"-expanding convention as
-  // the Icon Search Path field below; consumed by BitmapFontDialog and by
-  // FXFontSelector's own bitmap-font listing (see FXFont::listBitmapFonts()).
+  // the Icon Search Path field below; consumed by FXFontSelector's own
+  // bitmap-font listing (see FXFont::listBitmapFonts()), which is how
+  // "Normal Font" above now offers .FON files too, alongside Xft ones.
   FXHorizontalFrame* hframe2b=new FXHorizontalFrame(vframe4,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING);
   new FXLabel(hframe2b,tr("Bitmap Font Path:"),nullptr,LAYOUT_CENTER_Y);
   FXTextField* bitmapfontdirs=new FXTextField(hframe2b,2,&target_bitmapfontpath,FXDataTarget::ID_VALUE,LAYOUT_SIDE_LEFT|LAYOUT_FILL_X|LAYOUT_CENTER_Y|FRAME_SUNKEN|FRAME_THICK);
@@ -915,27 +912,6 @@ long FXDesktopSetup::onChooseFont(FXObject*,FXSelector,void*){
   return 1;
   }
 
-
-// Pick a Windows .FON bitmap font file to use instead of an Xft font
-long FXDesktopSetup::onChooseBitmapFont(FXObject*,FXSelector,void*){
-  BitmapFontDialog dialog(this,tr("Select Bitmap Font"),FXString::null);
-  if(dialog.haveFonts()){
-    dialog.setFontSpec(fontspec);
-    if(dialog.execute(PLACEMENT_OWNER)){
-      fontspec=dialog.getFontSpec();
-      setupFont();
-      }
-    }
-  else{
-    // Nothing found on the default search path (see BitmapFontDialog.cpp) -- fall back to a plain file browser.
-    FXString newfile=FXFileDialog::getOpenFilename(this,tr("Select Bitmap Font"),fontspec,tr("Bitmap Fonts (*.fon,*.FON)\nAll Files (*)"));
-    if(!newfile.empty()){
-      fontspec=newfile;
-      setupFont();
-      }
-    }
-  return 1;
-  }
 
 /*******************************************************************************/
 

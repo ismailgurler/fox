@@ -106,8 +106,23 @@ FXint FXFrame::getDefaultHeight(){
 
 
 void FXFrame::drawBorderRectangle(FXDCWindow& dc,FXint x,FXint y,FXint w,FXint h){
-  dc.setForeground(borderColor);
-  dc.drawRectangle(x,y,w-1,h-1);
+  // Prototype: this used to be a single dc.drawRectangle() -- an X11
+  // "hairline" stroke, always exactly 1 *physical* pixel regardless of
+  // scale (unlike the fillRectangle-built borders in the sibling
+  // draw*Rectangle() functions below, whose thickness is a real scaled
+  // dimension). Setting an explicit scaled line width isn't enough to
+  // fix that either: X11 centers a stroke on its path, so half of it
+  // would fall outside [x,x+w) x [y,y+h) and get clipped away by
+  // whatever's outside this widget's own bounds. Building the border
+  // out of four filled bands instead -- exactly like every sibling
+  // style below -- sidesteps both problems at once (see PLAN.md, Phase 4).
+  if(0<w && 0<h){
+    dc.setForeground(borderColor);
+    dc.fillRectangle(x,y,w,1);
+    dc.fillRectangle(x,y+h-1,w,1);
+    dc.fillRectangle(x,y,1,h);
+    dc.fillRectangle(x+w-1,y,1,h);
+    }
   }
 
 

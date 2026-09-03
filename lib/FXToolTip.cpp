@@ -179,7 +179,18 @@ long FXToolTip::onPaint(FXObject*,FXSelector,void* ptr){
   dc.fillRectangle(ev->rect.x,ev->rect.y,ev->rect.w,ev->rect.h);
   dc.setForeground(textColor);
   dc.setFont(font);
-  dc.drawRectangle(0,0,width-1,height-1);
+  // Prototype: a stroked dc.drawRectangle() here is an X11 "hairline" --
+  // always exactly 1 physical pixel wide regardless of scale, and even a
+  // scaled setLineWidth() wouldn't help since X11 centers a stroke on its
+  // path, clipping away the half that falls outside this window's own
+  // bounds. Four filled bands avoid both problems (see PLAN.md, Phase 4,
+  // and FXFrame::drawBorderRectangle for the same fix/rationale).
+  if(0<width && 0<height){
+    dc.fillRectangle(0,0,width,1);
+    dc.fillRectangle(0,height-1,width,1);
+    dc.fillRectangle(0,0,1,height);
+    dc.fillRectangle(width-1,0,1,height);
+    }
   beg=label.text();
   if(beg){
     tx=1+HSPACE;

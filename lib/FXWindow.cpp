@@ -2395,8 +2395,15 @@ void FXWindow::scroll(FXint x,FXint y,FXint w,FXint h,FXint dx,FXint dy) const {
         eh=-dy;
         }
 
-      // BLIT the contents
-      XCopyArea((Display*)getApp()->getDisplay(),xid,xid,(GC)visual->scrollgc,fx,fy,w-ew,h-eh,tx,ty);
+      // BLIT the contents -- fx,fy,tx,ty,w,ew,h,eh above are all logical
+      // (like everything else this function is handed -- see addRepaint()
+      // calls below, which are correctly logical already), but XCopyArea
+      // is a raw Xlib call against the physical-sized window, so scale
+      // right here at the boundary (see PLAN.md, Phase 1).
+      {
+      FXint scale=getApp()->getScale();
+      XCopyArea((Display*)getApp()->getDisplay(),xid,xid,(GC)visual->scrollgc,fx*scale,fy*scale,(w-ew)*scale,(h-eh)*scale,tx*scale,ty*scale);
+      }
 
       // Post additional rectangles for the uncovered areas
       if(dy){

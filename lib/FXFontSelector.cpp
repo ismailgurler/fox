@@ -79,6 +79,14 @@ using namespace FX;
 
 namespace FX {
 
+// Tags a familylist item as a bitmap-font family rather than an Xft one --
+// an Xft entry's data is always a small FXFont-flags bit-combination (see
+// listFontFaces() below), so this all-bits-set sentinel can never collide
+// with one. Used by onCmdFamily() and listFontFaces() to tell the two
+// kinds of entry apart in the single merged, alphabetically sorted list
+// (see PLAN.md, Phase 4).
+#define BITMAP_FAMILY_MARKER ((FXptr)(FXival)-1)
+
 // Map
 FXDEFMAP(FXFontSelector) FXFontSelectorMap[]={
   FXMAPFUNC(SEL_COMMAND,FXFontSelector::ID_FAMILY,FXFontSelector::onCmdFamily),
@@ -246,6 +254,8 @@ FXFontSelector::FXFontSelector(FXComposite *p,FXObject* tgt,FXSelector sel,FXuin
   selected.setwidth=0;
   selected.flags=0;
   previewfont=nullptr;
+  bitmapfontsscanned=false;
+  bitmapmode=false;
   }
 
 
@@ -259,28 +269,144 @@ void FXFontSelector::create(){
   }
 
 
-// Fill the list with face names
+// Populate bitmapfonts by scanning SETTINGS/bitmapfontpath (see
+// FXFont::listBitmapFonts()), once, lazily -- this runs from
+// listFontFaces() rather than only create() since setFont()/setFontDesc()
+// can legitimately be called (e.g. by FXFontDialog::setFont()) before
+// create(), and need bitmapfonts populated to detect/select a preset
+// bitmap font correctly.
+void FXFontSelector::scanBitmapFonts(){
+  if(!bitmapfontsscanned){
+    FXString path=getApp()->reg().readStringEntry("SETTINGS","bitmapfontpath",FXFont::defaultBitmapFontPath);
+    FXFont::listBitmapFonts(bitmapfonts,path);
+    bitmapfontsscanned=true;
+    }
+  }
+
+
+// Find the .fon file for an exact (family,weight,italic,points) combination
+FXbool FXFontSelector::resolveBitmapPath(const FXString& fam,FXushort wt,FXbool ital,FXushort pts,FXString& path) const {
+  for(FXival i=0; i<bitmapfonts.no(); i++){
+    if(bitmapfonts[i].family==fam && bitmapfonts[i].weight==wt && bitmapfonts[i].italic==ital && bitmapfonts[i].points==pts){
+      path=bitmapfonts[i].path;
+      return true;
+      }
+    }
+  return false;
+  }
+
+
+// Grey out the Xft-only filter controls (they have no effect on a bitmap
+// font either way -- Character Set/Set Width/Pitch/Scalable/All Fonts are
+// all fontconfig concepts) whenever the current selection is a bitmap
+// font. Mirrors the same isBitmapFont()-driven pattern ControlPanel's
+// FXDesktopSetup::updateFontControlsEnabled() already uses for its own
+// Xft hint/AA controls.
+void FXFontSelector::updateFilterEnabled(){
+  if(bitmapmode){
+    charset->disable();
+    setwidth->disable();
+    pitch->disable();
+    scalable->disable();
+    if(allfonts) allfonts->disable();
+    }
+  else{
+    charset->enable();
+    setwidth->enable();
+    pitch->enable();
+    scalable->enable();
+    if(allfonts) allfonts->enable();
+    }
+  }
+
+
+// Fill the list with face names -- both ordinary (Xft) families and
+// bitmap-font families (from a directory scan, see scanBitmapFonts()),
+// merged into one alphabetically sorted list (see PLAN.md, Phase 4).
+//
+// A bitmap-font "family" doesn't have a single, uniquely-loadable name
+// the way an Xft family does: selected.face has to be the actual .fon
+// file path for FXFont's constructor to load it (see FXFont::create()),
+// and which file that is depends on which weight/style/size within the
+// family gets picked (Windows ships those as *separate files*, not one
+// file with several faces) -- see listWeights()/listSlants()/
+// listFontSizes()/previewFont() for how that gets resolved once family,
+// then weight/style, then size are chosen.
 void FXFontSelector::listFontFaces(){
   FXFontDesc *fonts;
   FXuint numfonts,f;
   FXint selindex=-1;
+
+  scanBitmapFonts();
+
+  // Is the current selection a bitmap font, and if so, which family?
+  bitmapmode=FXFont::isBitmapFontPath(selected.face);
+  bitmapfamily=FXString::null;
+  if(bitmapmode){
+    for(FXival i=0; i<bitmapfonts.no(); i++){
+      if(bitmapfonts[i].path==selected.face){ bitmapfamily=bitmapfonts[i].family; break; }
+      }
+    if(bitmapfamily.empty()) bitmapmode=false;   // preset path isn't among the scanned fonts
+    }
+
   familylist->clearItems();
   family->setText("");
+
+  // Xft families
   if(FXFont::listFonts(fonts,numfonts,FXString::null,0,0,selected.setwidth,selected.encoding,selected.flags)){
     FXASSERT(0<numfonts);
     for(f=0; f<numfonts; f++){
       familylist->appendItem(fonts[f].face,nullptr,(void*)(FXuval)fonts[f].flags);
-      if(FXString::compare(selected.face,fonts[f].face)==0) selindex=f;
-      }
-    if(selindex==-1) selindex=0;
-    if(0<familylist->getNumItems()){
-      familylist->setCurrentItem(selindex);
-      familylist->makeItemVisible(selindex);
-      family->setText(familylist->getItemText(selindex));
-      fxstrlcpy(selected.face,familylist->getItemText(selindex).text(),sizeof(selected.face));
       }
     freeElms(fonts);
     }
+
+  // Bitmap font families -- one entry per unique family name. (A bitmap
+  // family sharing its exact name with an installed Xft family -- unlikely,
+  // but possible -- collapses into the existing Xft entry here; not worth
+  // the added complexity of disambiguating display names for that edge case.)
+  for(FXival i=0; i<bitmapfonts.no(); i++){
+    if(familylist->findItem(bitmapfonts[i].family)<0){
+      familylist->appendItem(bitmapfonts[i].family,nullptr,BITMAP_FAMILY_MARKER);
+      }
+    }
+
+  // One merged, alphabetically sorted list
+  familylist->setSortFunc(FXList::ascending);
+  familylist->sortItems();
+
+  // Find the current selection in it
+  for(f=0; f<(FXuint)familylist->getNumItems(); f++){
+    FXbool isbitmap=(familylist->getItemData((FXint)f)==BITMAP_FAMILY_MARKER);
+    if(bitmapmode==isbitmap){
+      if(bitmapmode){
+        if(familylist->getItemText((FXint)f)==bitmapfamily){ selindex=(FXint)f; break; }
+        }
+      else if(FXString::compare(selected.face,familylist->getItemText((FXint)f).text())==0){
+        selindex=(FXint)f; break;
+        }
+      }
+    }
+  if(selindex==-1) selindex=0;
+  if(0<familylist->getNumItems()){
+    familylist->setCurrentItem(selindex);
+    familylist->makeItemVisible(selindex);
+    family->setText(familylist->getItemText(selindex));
+    if(familylist->getItemData(selindex)==BITMAP_FAMILY_MARKER){
+      bitmapmode=true;
+      bitmapfamily=familylist->getItemText(selindex);
+      // Seed selected.face with any matching variant's path -- previewFont()
+      // resolves it precisely once weight/slant/size are picked below.
+      for(FXival i=0; i<bitmapfonts.no(); i++){
+        if(bitmapfonts[i].family==bitmapfamily){ fxstrlcpy(selected.face,bitmapfonts[i].path.text(),sizeof(selected.face)); break; }
+        }
+      }
+    else{
+      bitmapmode=false;
+      fxstrlcpy(selected.face,familylist->getItemText(selindex).text(),sizeof(selected.face));
+      }
+    }
+  updateFilterEnabled();
   }
 
 
@@ -292,6 +418,50 @@ void FXFontSelector::listWeights(){
   FXint selindex=-1;
   weightlist->clearItems();
   weight->setText("");
+
+  // Bitmap font: unique weights among this family's variants, instead of
+  // an Xft listFonts() query
+  if(bitmapmode){
+    FXushort found[16]; FXint nfound=0;
+    for(FXival i=0; i<bitmapfonts.no(); i++){
+      if(bitmapfonts[i].family!=bitmapfamily) continue;
+      FXushort w=bitmapfonts[i].weight;
+      FXint j=0;
+      while(j<nfound && found[j]!=w) j++;
+      if(j==nfound && nfound<(FXint)ARRAYNUMBER(found)) found[nfound++]=w;
+      }
+    for(FXint a=1; a<nfound; a++){                       // insertion sort, ascending
+      FXushort v=found[a]; FXint b=a-1;
+      while(0<=b && v<found[b]){ found[b+1]=found[b]; b--; }
+      found[b+1]=v;
+      }
+    for(FXint k=0; k<nfound; k++){
+      ww=found[k];
+      switch(ww){
+        case FXFont::Thin: wgt="thin"; break;
+        case FXFont::ExtraLight: wgt="extra light"; break;
+        case FXFont::Light: wgt="light"; break;
+        case FXFont::Normal: wgt="normal"; break;
+        case FXFont::Medium: wgt="medium"; break;
+        case FXFont::DemiBold: wgt="demibold"; break;
+        case FXFont::Bold: wgt="bold"; break;
+        case FXFont::ExtraBold: wgt="extra bold"; break;
+        case FXFont::Black: wgt="black"; break;
+        default: wgt="normal"; break;
+        }
+      weightlist->appendItem(tr(wgt),nullptr,(void*)(FXuval)ww);
+      if(selected.weight==ww) selindex=weightlist->getNumItems()-1;
+      }
+    if(selindex==-1) selindex=0;
+    if(0<weightlist->getNumItems()){
+      weightlist->setCurrentItem(selindex);
+      weightlist->makeItemVisible(selindex);
+      weight->setText(weightlist->getItemText(selindex));
+      selected.weight=(FXuint)(FXuval)weightlist->getItemData(selindex);
+      }
+    return;
+    }
+
   if(FXFont::listFonts(fonts,numfonts,selected.face,0,0,selected.setwidth,selected.encoding,selected.flags)){
     FXASSERT(0<numfonts);
     lastww=0;
@@ -341,6 +511,32 @@ void FXFontSelector::listSlants(){
   FXint selindex=-1;
   stylelist->clearItems();
   style->setText("");
+
+  // Bitmap font: regular/italic among this family+weight's variants
+  if(bitmapmode){
+    FXbool haveregular=false,haveitalic=false;
+    for(FXival i=0; i<bitmapfonts.no(); i++){
+      if(bitmapfonts[i].family!=bitmapfamily || bitmapfonts[i].weight!=selected.weight) continue;
+      if(bitmapfonts[i].italic) haveitalic=true; else haveregular=true;
+      }
+    if(haveregular){
+      stylelist->appendItem(tr("regular"),nullptr,(void*)(FXuval)FXFont::Straight);
+      if(selected.slant==FXFont::Straight || selected.slant==0) selindex=stylelist->getNumItems()-1;
+      }
+    if(haveitalic){
+      stylelist->appendItem(tr("italic"),nullptr,(void*)(FXuval)FXFont::Italic);
+      if(selected.slant==FXFont::Italic) selindex=stylelist->getNumItems()-1;
+      }
+    if(selindex==-1) selindex=0;
+    if(0<stylelist->getNumItems()){
+      stylelist->setCurrentItem(selindex);
+      stylelist->makeItemVisible(selindex);
+      style->setText(stylelist->getItemText(selindex));
+      selected.slant=(FXuint)(FXuval)stylelist->getItemData(selindex);
+      }
+    return;
+    }
+
   if(FXFont::listFonts(fonts,numfonts,selected.face,selected.weight,0,selected.setwidth,selected.encoding,selected.flags)){
     FXASSERT(0<numfonts);
     lasts=0;
@@ -387,6 +583,41 @@ void FXFontSelector::listFontSizes(){
   sizelist->clearItems();
   size->setText("");
   FXString string;
+
+  // Bitmap font: unique point sizes among this family+weight+slant's
+  // variants, instead of an Xft listFonts() query. Sorted *numerically*
+  // (not by item text -- "10.0" would otherwise sort before "8.0").
+  if(bitmapmode){
+    FXushort found[64]; FXint nfound=0;
+    for(FXival i=0; i<bitmapfonts.no(); i++){
+      if(bitmapfonts[i].family!=bitmapfamily || bitmapfonts[i].weight!=selected.weight) continue;
+      if((bitmapfonts[i].italic?(FXuint)FXFont::Italic:(FXuint)FXFont::Straight)!=selected.slant) continue;
+      FXushort pts=bitmapfonts[i].points;
+      FXint j=0;
+      while(j<nfound && found[j]!=pts) j++;
+      if(j==nfound && nfound<(FXint)ARRAYNUMBER(found)){
+        FXint pos=nfound;
+        while(0<pos && pts<found[pos-1]){ found[pos]=found[pos-1]; pos--; }
+        found[pos]=pts;
+        nfound++;
+        }
+      }
+    for(FXint k=0; k<nfound; k++){
+      s=(FXuint)found[k]*10;        // deci-points, matching selected.size / the Xft branch below
+      string.format("%.1f",0.1*s);
+      sizelist->appendItem(string,nullptr,(void*)(FXuval)s);
+      if(selected.size==s) selindex=sizelist->getNumItems()-1;
+      }
+    if(selindex==-1) selindex=0;
+    if(0<sizelist->getNumItems()){
+      sizelist->setCurrentItem(selindex);
+      sizelist->makeItemVisible(selindex);
+      size->setText(sizelist->getItemText(selindex));
+      selected.size=(FXuint)(FXuval)sizelist->getItemData(selindex);
+      }
+    return;
+    }
+
   if(FXFont::listFonts(fonts,numfonts,selected.face,selected.weight,selected.slant,selected.setwidth,selected.encoding,selected.flags)){
     FXASSERT(0<numfonts);
     lasts=0;
@@ -445,6 +676,18 @@ void FXFontSelector::previewFont(){
   // Save old font
   FXFont *old=previewfont;
 
+  // For a bitmap font, resolve selected.face to the exact file for the
+  // currently chosen weight/slant/size within bitmapfamily -- it may be a
+  // *different* file than the one seeded by onCmdFamily()/listFontFaces()
+  // (Windows ships separate files per weight/style, not one file with
+  // several faces bundled in).
+  if(bitmapmode){
+    FXString path;
+    if(resolveBitmapPath(bitmapfamily,(FXushort)selected.weight,selected.slant==FXFont::Italic,(FXushort)(selected.size/10),path)){
+      fxstrlcpy(selected.face,path.text(),sizeof(selected.face));
+      }
+    }
+
   // Get new font
   previewfont=new FXFont(getApp(),selected);
 
@@ -461,11 +704,26 @@ void FXFontSelector::previewFont(){
 
 // Selected font family
 long FXFontSelector::onCmdFamily(FXObject*,FXSelector,void* ptr){
-  fxstrlcpy(selected.face,familylist->getItemText((FXint)(FXival)ptr).text(),sizeof(selected.face));
-  family->setText(selected.face);
+  FXint index=(FXint)(FXival)ptr;
+  if(familylist->getItemData(index)==BITMAP_FAMILY_MARKER){
+    bitmapmode=true;
+    bitmapfamily=familylist->getItemText(index);
+    family->setText(bitmapfamily);
+    // Seed selected.face with any matching variant's path -- previewFont()
+    // resolves it precisely once weight/slant/size are picked below.
+    for(FXival i=0; i<bitmapfonts.no(); i++){
+      if(bitmapfonts[i].family==bitmapfamily){ fxstrlcpy(selected.face,bitmapfonts[i].path.text(),sizeof(selected.face)); break; }
+      }
+    }
+  else{
+    bitmapmode=false;
+    fxstrlcpy(selected.face,familylist->getItemText(index).text(),sizeof(selected.face));
+    family->setText(selected.face);
+    }
   listWeights();
   listSlants();
   listFontSizes();
+  updateFilterEnabled();
   previewFont();
   return 1;
   }

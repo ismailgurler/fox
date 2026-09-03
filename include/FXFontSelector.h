@@ -59,6 +59,10 @@ protected:
   FXLabel       *preview;
   FXFont        *previewfont;
   FXFontDesc     selected;
+  FXArray<FXBitmapFontEntry> bitmapfonts;   // Flat scan results (see scanBitmapFonts())
+  FXbool         bitmapfontsscanned;        // True once bitmapfonts has been populated (lazily, on first listFontFaces())
+  FXbool         bitmapmode;                // True if the current family selection is a bitmap font, not Xft
+  FXString       bitmapfamily;              // The bitmap family name currently selected (valid iff bitmapmode)
 protected:
   FXFontSelector(){}
   void listFontFaces();
@@ -66,6 +70,9 @@ protected:
   void listSlants();
   void listFontSizes();
   void previewFont();
+  void scanBitmapFonts();
+  FXbool resolveBitmapPath(const FXString& fam,FXushort wt,FXbool ital,FXushort pts,FXString& path) const;
+  void updateFilterEnabled();
 private:
   FXFontSelector(const FXFontSelector&);
   FXFontSelector &operator=(const FXFontSelector&);

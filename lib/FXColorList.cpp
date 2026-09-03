@@ -90,7 +90,15 @@ void FXColorItem::draw(const FXList* list,FXDC& dc,FXint xx,FXint yy,FXint ww,FX
   dc.setForeground(color);
   dc.fillRectangle(xx,yy+(hh-SWATCH_HEIGHT)/2,SWATCH_WIDTH,SWATCH_HEIGHT);
   dc.setForeground(FXRGB(0,0,0));
-  dc.drawRectangle(xx,yy+(hh-SWATCH_HEIGHT)/2,SWATCH_WIDTH,SWATCH_HEIGHT);
+  // Filled bands, not a stroked drawRectangle() (X11 hairline, stays 1
+  // physical pixel regardless of scale) -- see FXFrame::drawBorderRectangle().
+  {
+  FXint sy=yy+(hh-SWATCH_HEIGHT)/2;
+  dc.fillRectangle(xx,sy,SWATCH_WIDTH+1,1);
+  dc.fillRectangle(xx,sy+SWATCH_HEIGHT,SWATCH_WIDTH+1,1);
+  dc.fillRectangle(xx,sy,1,SWATCH_HEIGHT+1);
+  dc.fillRectangle(xx+SWATCH_WIDTH,sy,1,SWATCH_HEIGHT+1);
+  }
   xx+=ICON_SPACING+SWATCH_WIDTH;
   if(!label.empty()){
     dc.setFont(font);

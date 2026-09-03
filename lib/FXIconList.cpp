@@ -1763,7 +1763,13 @@ long FXIconList::onPaint(FXObject*,FXSelector,void* ptr){
       dc.setForeground(FXRGB(0xD5,0xD5,0xD5));
       dc.fillRectangle(x+pos_x,y+pos_y,w,h);
       dc.setForeground(FXRGB(0x55,0x55,0x55));
-      dc.drawRectangle(x+pos_x,y+pos_y,w-1,h-1);
+      // Filled bands, not a stroked drawRectangle() (X11 hairline, stays 1
+      // physical pixel regardless of scale, unlike the fill above) -- see
+      // FXFrame::drawBorderRectangle().
+      dc.fillRectangle(x+pos_x,y+pos_y,w,1);
+      dc.fillRectangle(x+pos_x,y+pos_y+h-1,w,1);
+      dc.fillRectangle(x+pos_x,y+pos_y,1,h);
+      dc.fillRectangle(x+pos_x+w-1,y+pos_y,1,h);
       }
     }
 

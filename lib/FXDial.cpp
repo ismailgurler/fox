@@ -663,9 +663,20 @@ long FXDial::onPaint(FXObject*,FXSelector,void* ptr){
   // Border
   drawFrame(dc,0,0,width,height);
 
-  // Inner rectangle
+  // Inner rectangle -- filled bands, not a stroked drawRectangle(): the
+  // latter is an X11 hairline (always 1 physical pixel regardless of
+  // scale, and centered on its path so a scaled stroke would clip at
+  // this widget's own edge) -- see FXFrame::drawBorderRectangle().
   dc.setForeground(shadowColor);
-  dc.drawRectangle(lt-1,tp-1,rt-lt+2,bm-tp+2);
+  {
+  FXint bx=lt-1,by=tp-1,bw=rt-lt+2,bh=bm-tp+2;
+  if(0<bw && 0<bh){
+    dc.fillRectangle(bx,by,bw,1);
+    dc.fillRectangle(bx,by+bh-1,bw,1);
+    dc.fillRectangle(bx,by,1,bh);
+    dc.fillRectangle(bx+bw-1,by,1,bh);
+    }
+  }
   return 1;
   }
 

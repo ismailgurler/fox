@@ -243,7 +243,12 @@ void FXRulerView::drawBackground(FXDCWindow& dc){
   dc.setForeground(docColor);
   dc.fillRectangle(docx,docy,docw,doch);
   dc.setForeground(FXRGB(0,0,0));
-  dc.drawRectangle(docx-1,docy-1,docw+1,doch+1);
+  // Filled bands, not a stroked drawRectangle() (X11 hairline, stays 1
+  // physical pixel regardless of scale) -- see FXFrame::drawBorderRectangle().
+  dc.fillRectangle(docx-1,docy-1,docw+2,1);
+  dc.fillRectangle(docx-1,docy+doch,docw+2,1);
+  dc.fillRectangle(docx-1,docy-1,1,doch+2);
+  dc.fillRectangle(docx+docw,docy-1,1,doch+2);
   dc.fillRectangle(docx+1,docy+doch+1,docw+2,2);
   dc.fillRectangle(docx+docw+1,docy+1,2,doch+2);
   }

@@ -147,8 +147,18 @@ void FXToolBarShell::create(){
 
 
 void FXToolBarShell::drawBorderRectangle(FXDCWindow& dc,FXint x,FXint y,FXint w,FXint h){
-  dc.setForeground(borderColor);
-  dc.drawRectangle(x,y,w-1,h-1);
+  // A stroked drawRectangle() is an X11 "hairline" -- always 1 physical
+  // pixel wide regardless of scale, and unlike a filled band, a scaled
+  // stroke would also get half-clipped at this widget's own edge (X11
+  // centers a stroke on its path). Four filled bands avoid both problems
+  // -- see FXFrame::drawBorderRectangle() for the original fix/rationale.
+  if(0<w && 0<h){
+    dc.setForeground(borderColor);
+    dc.fillRectangle(x,y,w,1);
+    dc.fillRectangle(x,y+h-1,w,1);
+    dc.fillRectangle(x,y,1,h);
+    dc.fillRectangle(x+w-1,y,1,h);
+    }
   }
 
 

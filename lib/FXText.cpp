@@ -3902,7 +3902,13 @@ void FXText::paintCursor(FXDCWindow& dc) const {
       if(0<dc.getClipWidth() && 0<dc.getClipHeight()){
         dc.setForeground(cursorColor);
         if(options&TEXT_OVERSTRIKE){
-          dc.drawRectangle(cursorx,cursory,tw,th-1);
+          // Filled bands, not a stroked drawRectangle() (X11 hairline,
+          // stays 1 physical pixel regardless of scale) -- see
+          // FXFrame::drawBorderRectangle().
+          dc.fillRectangle(cursorx,cursory,tw+1,1);
+          dc.fillRectangle(cursorx,cursory+th-1,tw+1,1);
+          dc.fillRectangle(cursorx,cursory,1,th);
+          dc.fillRectangle(cursorx+tw,cursory,1,th);
           }
         else{
           dc.fillRectangle(cursorx,cursory,2,th);

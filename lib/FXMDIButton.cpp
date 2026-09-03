@@ -184,7 +184,12 @@ long FXMDIRestoreButton::onPaint(FXObject*,FXSelector,void* ptr){
   else
     dc.setForeground(shadowColor);
   dc.fillRectangle(xx+3,yy,6,2);
-  dc.drawRectangle(xx+3,yy,6,5);
+  // Filled bands, not a stroked drawRectangle() (X11 hairline, stays 1
+  // physical pixel regardless of scale) -- see FXFrame::drawBorderRectangle().
+  dc.fillRectangle(xx+3,yy,7,1);
+  dc.fillRectangle(xx+3,yy+5,7,1);
+  dc.fillRectangle(xx+3,yy,1,6);
+  dc.fillRectangle(xx+9,yy,1,6);
   dc.setForeground(backColor);
   dc.fillRectangle(xx,yy+3,6,5);
   if(isEnabled())
@@ -192,7 +197,10 @@ long FXMDIRestoreButton::onPaint(FXObject*,FXSelector,void* ptr){
   else
     dc.setForeground(shadowColor);
   dc.fillRectangle(xx,yy+3,6,2);
-  dc.drawRectangle(xx,yy+3,6,5);
+  dc.fillRectangle(xx,yy+3,7,1);
+  dc.fillRectangle(xx,yy+8,7,1);
+  dc.fillRectangle(xx,yy+3,1,6);
+  dc.fillRectangle(xx+6,yy+3,1,6);
   return 1;
   }
 
@@ -248,7 +256,12 @@ long FXMDIMaximizeButton::onPaint(FXObject*,FXSelector,void* ptr){
   else
     dc.setForeground(shadowColor);
   dc.fillRectangle(xx,yy,8,2);
-  dc.drawRectangle(xx,yy,8,8);
+  // Filled bands, not a stroked drawRectangle() (X11 hairline, stays 1
+  // physical pixel regardless of scale) -- see FXFrame::drawBorderRectangle().
+  dc.fillRectangle(xx,yy,9,1);
+  dc.fillRectangle(xx,yy+8,9,1);
+  dc.fillRectangle(xx,yy,1,9);
+  dc.fillRectangle(xx+8,yy,1,9);
   return 1;
   }
 

@@ -352,10 +352,15 @@ long FXCheckButton::onPaint(FXObject*,FXSelector,void* ptr){
     dc.setForeground(boxColor);
   dc.fillRectangle(ix+2,iy+2,9,9);
 
-  // Check border
+  // Check border -- filled bands, not a stroked drawRectangle() (X11
+  // hairline, stays 1 physical pixel regardless of scale unlike the
+  // fillRectangle-built box below in the non-PLUS case just below this).
   if(options&CHECKBUTTON_PLUS){
     dc.setForeground(textColor);
-    dc.drawRectangle(ix+2,iy+2,8,8);
+    dc.fillRectangle(ix+2,iy+2,9,1);
+    dc.fillRectangle(ix+2,iy+10,9,1);
+    dc.fillRectangle(ix+2,iy+2,1,9);
+    dc.fillRectangle(ix+10,iy+2,1,9);
     }
   else{
     dc.setForeground(shadowColor);

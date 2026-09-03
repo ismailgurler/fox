@@ -1365,7 +1365,16 @@ long FXFoldingList::onPaint(FXObject*,FXSelector,void* ptr){
           dc.setFillStyle(FILL_STIPPLED);
           dc.fillRectangle(xh+4,yh,(SIDE_SPACING/2)-2,1);
           dc.setFillStyle(FILL_SOLID);
-          dc.drawRectangle(xh-HALFBOX_SIZE,yh-HALFBOX_SIZE,HALFBOX_SIZE+HALFBOX_SIZE,HALFBOX_SIZE+HALFBOX_SIZE);
+          // Filled bands, not a stroked drawRectangle() (X11 hairline,
+          // stays 1 physical pixel regardless of scale) -- see
+          // FXFrame::drawBorderRectangle().
+          {
+          FXint bx=xh-HALFBOX_SIZE,by=yh-HALFBOX_SIZE,bs=HALFBOX_SIZE+HALFBOX_SIZE;
+          dc.fillRectangle(bx,by,bs+1,1);
+          dc.fillRectangle(bx,by+bs,bs+1,1);
+          dc.fillRectangle(bx,by,1,bs+1);
+          dc.fillRectangle(bx+bs,by,1,bs+1);
+          }
           dc.setForeground(textColor);
           dc.fillRectangle(xh-HALFBOX_SIZE+2,yh,HALFBOX_SIZE+HALFBOX_SIZE-3,1);
           if(!(options&FOLDINGLIST_AUTOSELECT) && !item->isExpanded()){

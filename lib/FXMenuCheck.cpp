@@ -322,7 +322,12 @@ long FXMenuCheck::onPaint(FXObject*,FXSelector,void* ptr){
     dc.setForeground(boxColor);
   dc.fillRectangle(xx+1,yy+1,8,8);
   dc.setForeground(shadowColor);
-  dc.drawRectangle(xx,yy,9,9);
+  // Filled bands, not a stroked drawRectangle() (X11 hairline, stays 1
+  // physical pixel regardless of scale) -- see FXFrame::drawBorderRectangle().
+  dc.fillRectangle(xx,yy,10,1);
+  dc.fillRectangle(xx,yy+9,10,1);
+  dc.fillRectangle(xx,yy,1,10);
+  dc.fillRectangle(xx+9,yy,1,10);
 
   // Draw the check
   if(check!=false){

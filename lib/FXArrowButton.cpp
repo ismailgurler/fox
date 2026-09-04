@@ -487,12 +487,16 @@ long FXArrowButton::onPaint(FXObject*,FXSelector,void* ptr){
     dc.setForeground(shadowColor);
 
   // NB Size of arrow should stretch
+  // UP is the exact vertical mirror of DOWN below -- it used to be 2 logical
+  // pixels wider and 1 taller (apex at yy-1, base spanning the full [xx,
+  // xx+ww]), an asymmetry that was easy to miss at scale=1 but doubles into
+  // several visibly-mismatched physical pixels at higher scale (see PLAN.md).
   if(options&ARROW_UP){
     points[0].x=xx+(ww>>1);
-    points[0].y=yy-1;
-    points[1].x=xx;
+    points[0].y=yy;
+    points[1].x=xx+1;
     points[1].y=yy+hh;
-    points[2].x=xx+ww;
+    points[2].x=xx+ww-1;
     points[2].y=yy+hh;
     dc.fillPolygon(points,3);
     }

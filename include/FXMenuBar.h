@@ -36,6 +36,7 @@ protected:
 private:
   FXMenuBar(const FXMenuBar&);
   FXMenuBar &operator=(const FXMenuBar&);
+  FXbool insidePane(FXint rootx,FXint rooty) const;
 public:
   long onFocusLeft(FXObject*,FXSelector,void*);
   long onFocusRight(FXObject*,FXSelector,void*);

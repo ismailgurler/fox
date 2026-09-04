@@ -38,6 +38,9 @@
 #include "FXWindow.h"
 #include "FXApp.h"
 #include "FXButton.h"
+#include "FXPopup.h"
+#include "FXMenuTitle.h"
+#include "FXRootWindow.h"
 #include "FXMenuBar.h"
 
 
@@ -139,7 +142,7 @@ long FXMenuBar::onEnter(FXObject* sender,FXSelector sel,void* ptr){
   if(!getFocus() || !getFocus()->isActive()) return 1;
   if(((FXEvent*)ptr)->code==CROSSINGNORMAL){
     translateCoordinatesTo(px,py,getParent(),((FXEvent*)ptr)->win_x,((FXEvent*)ptr)->win_y);
-    if(contains(px,py) && grabbed()) ungrab();
+    if((contains(px,py) || insidePane(((FXEvent*)ptr)->root_x,((FXEvent*)ptr)->root_y)) && grabbed()) ungrab();
     }
   return 1;
   }
@@ -152,7 +155,7 @@ long FXMenuBar::onLeave(FXObject* sender,FXSelector sel,void* ptr){
   if(!getFocus() || !getFocus()->isActive()) return 1;
   if(((FXEvent*)ptr)->code==CROSSINGNORMAL){
     translateCoordinatesTo(px,py,getParent(),((FXEvent*)ptr)->win_x,((FXEvent*)ptr)->win_y);
-    if(!contains(px,py) && !grabbed()) grab();
+    if(!contains(px,py) && !insidePane(((FXEvent*)ptr)->root_x,((FXEvent*)ptr)->root_y) && !grabbed()) grab();
     }
   return 1;
   }
@@ -171,6 +174,32 @@ FXbool FXMenuBar::contains(FXint parentx,FXint parenty) const {
   }
 
 
+// Test if point (in ROOT/screen coordinates) falls within the currently
+// posted dropdown pane. contains() above only recognizes the bar strip
+// itself and the focused title's own button rectangle -- the pane is a
+// separate top-level shell, positioned independently, not a child
+// rectangle of the bar, so contains() can never see it. Without this,
+// hovering the open dropdown's own items can leave the bar's pointer
+// grab held (owner_events=false, so the grab window gets every event
+// instead of the item under the cursor), and the items never receive
+// their own Enter/Leave to highlight. Root coordinates are used because
+// the pane's xpos/ypos are relative to the title's own top-level
+// ancestor, not to the bar's immediate parent, and root/screen is the
+// one frame both can be compared in unambiguously (see PLAN.md).
+FXbool FXMenuBar::insidePane(FXint rootx,FXint rooty) const {
+  if(FXMenuTitle* title=dynamic_cast<FXMenuTitle*>(getFocus())){
+    if(FXPopup* pane=title->getMenu()){
+      if(pane->shown()){
+        FXint rx,ry;
+        pane->translateCoordinatesTo(rx,ry,getApp()->getRootWindow(),0,0);
+        return rx<=rootx && rootx<rx+pane->getWidth() && ry<=rooty && rooty<ry+pane->getHeight();
+        }
+      }
+    }
+  return false;
+  }
+
+
 // Moved while outside
 // We need to do this because the definition of ``inside'' means
 // that we're inside even though possibly we're not in THIS window!!!
@@ -179,7 +208,7 @@ long FXMenuBar::onMotion(FXObject*,FXSelector,void* ptr){
   FXint px,py;
   if(!getFocus() || !getFocus()->isActive()) return 0;
   translateCoordinatesTo(px,py,getParent(),ev->win_x,ev->win_y);
-  if(contains(px,py)){
+  if(contains(px,py) || insidePane(ev->root_x,ev->root_y)){
     if(grabbed()) ungrab();
     }
   else{

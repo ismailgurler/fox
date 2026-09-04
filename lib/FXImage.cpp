@@ -368,23 +368,9 @@ void FXImage::create(){
       // Were we successful?
       if(!xid){ throw FXImageException("unable to create image"); }
 
-      // Render pixels
-#ifndef WIN32
-      if(FXColor* scaled=scalePixelsUp(scale)){
-        FXColor* odata=data;
-        FXint ow=width, oh=height;
-        data=scaled;
-        width=ow*scale;
-        height=oh*scale;
-        render();
-        data=odata;
-        width=ow;
-        height=oh;
-        freeElms(scaled);
-        }
-      else
-#endif
-        render();
+      // Render pixels -- render() itself is scale-aware (see PLAN.md,
+      // Phase 2 item 4 follow-up), so no special-casing needed here.
+      render();
 
       // Release pixel buffer
       if(!(options&IMAGE_KEEP)) release();
@@ -1379,8 +1365,37 @@ void FXImage::render_mono_1_dither(void *xim,FXuchar *img){
   }
 
 
-// Render into pixmap
+// Render into pixmap -- public, scale-aware entry point. Wraps the raw
+// upload (renderPixels()) with a temporary pixel-doubled data/width/height
+// swap, so every direct caller (not just create(), which used to do this
+// inline before every caller had to know the trick) gets correctly-scaled
+// output automatically (see PLAN.md). Subclasses (FXIcon) that manage
+// their OWN wider scale-up wrapper (spanning shape/etch masks too, not
+// just color pixels) call renderPixels() directly instead, to avoid
+// scaling twice.
 void FXImage::render(){
+  FXint scale=getApp()->getScale();
+  FXColor* scaledup=(1<scale) ? scalePixelsUp(scale) : nullptr;
+  FXColor* odata=data;
+  FXint ow=width, oh=height;
+  if(scaledup){
+    data=scaledup;
+    width=ow*scale;
+    height=oh*scale;
+    }
+  renderPixels();
+  if(scaledup){
+    data=odata;
+    width=ow;
+    height=oh;
+    freeElms(scaledup);
+    }
+  }
+
+
+// Raw upload of the CURRENT data/width/height into the pixmap -- no
+// scale-awareness of its own (see render() above and PLAN.md).
+void FXImage::renderPixels(){
   if(xid){
     FXbool shmi=false;
     XImage *xim=nullptr;
@@ -1390,7 +1405,7 @@ void FXImage::render(){
     XShmSegmentInfo shminfo;
 #endif
 
-    FXTRACE((TOPIC_CREATION,"%s::render image %p\n",getClassName(),this));
+    FXTRACE((TOPIC_CREATION,"%s::renderPixels %p\n",getClassName(),this));
 
     // Fill with pixels if there is data
     if(data && 0<width && 0<height){

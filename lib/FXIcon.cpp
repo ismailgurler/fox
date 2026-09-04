@@ -378,8 +378,12 @@ void FXIcon::render(){
 
     FXTRACE((TOPIC_CREATION,"%s::render shape %p\n",getClassName(),this));
 
-    // Render the image pixels
-    FXImage::render();
+    // Render the image pixels -- renderPixels(), not render(): FXIcon::
+    // create() already runs its own scale-up wrapper spanning this whole
+    // function (color pixels AND shape/etch masks, kept pixel-aligned by
+    // scaling all three pixmaps together); calling the now scale-aware
+    // render() here would pixel-double a second time (see PLAN.md).
+    FXImage::renderPixels();
 
     // Fill with pixels if there is data
     if(data && 0<width && 0<height){

@@ -79,6 +79,14 @@ protected:
   // allocation failure; caller frees the result with freeElms().
   FXColor *scalePixelsUp(FXint scale) const;
 #endif
+  // Prototype: raw, scale-oblivious upload of the CURRENT data/width/height
+  // into the pixmap -- the actual body render() used to be before it grew
+  // scale-awareness. render() itself now does the scalePixelsUp() dance
+  // around a call to this. Kept accessible to subclasses (FXIcon) that
+  // manage their OWN scale-up wrapper spanning more than just the color
+  // pixels (shape/etch masks too) and must not have it applied twice (see
+  // PLAN.md).
+  void renderPixels();
 private:
 #ifdef WIN32
   virtual FXID GetDC() const;

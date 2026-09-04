@@ -323,7 +323,11 @@ long FXMenuRadio::onPaint(FXObject*,FXSelector,void* ptr){
     dc.setForeground(radioColor);
   dc.fillArc(xx,yy,9,9,0,360*64);
   dc.setForeground(shadowColor);
+  // Scaled line width -- an unset/hairline GC draws this outline at exactly
+  // 1 physical pixel regardless of scale (see PLAN.md).
+  dc.setLineWidth(1);
   dc.drawArc(xx,yy,9,9,0,360*64);
+  dc.setLineWidth(0);
 
   // Draw the bullit
   if(check!=false){

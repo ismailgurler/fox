@@ -229,6 +229,9 @@ void FXProgressBar::drawInterior(FXDCWindow& dc){
       }
 
     // Draw outside circle
+    // Scaled line width -- an unset/hairline GC draws these bevel outlines
+    // at exactly 1 physical pixel regardless of scale (see PLAN.md).
+    dc.setLineWidth(1);
     dc.setForeground(borderColor);
     dc.drawArc(dx+1,dy,ds,ds,90*64,45*64);
     dc.drawArc(dx,dy+1,ds,ds,135*64,45*64);
@@ -240,6 +243,7 @@ void FXProgressBar::drawInterior(FXDCWindow& dc){
     dc.drawArc(dx,dy,ds,ds,45*64,180*64);
     dc.setForeground(hiliteColor);
     dc.drawArc(dx,dy,ds,ds,225*64,180*64);
+    dc.setLineWidth(0);
 
     // Draw text
     if(options&PROGRESSBAR_PERCENTAGE){

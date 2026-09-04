@@ -347,7 +347,11 @@ long FXMenuCheck::onPaint(FXObject*,FXSelector,void* ptr){
     else{
       dc.setForeground(shadowColor);
       }
+    // Scaled line width -- an unset/hairline GC draws each diagonal segment
+    // as exactly 1 physical pixel regardless of scale (see PLAN.md).
+    dc.setLineWidth(1);
     dc.drawLineSegments(seg,6);
+    dc.setLineWidth(0);
     }
 
   return 1;

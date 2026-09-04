@@ -410,7 +410,12 @@ long FXCheckButton::onPaint(FXObject*,FXSelector,void* ptr){
       seg[4].x1=5+ix; seg[4].y1=8+iy; seg[4].x2=9+ix; seg[4].y2=4+iy;
       seg[5].x1=5+ix; seg[5].y1=9+iy; seg[5].x2=9+ix; seg[5].y2=5+iy;
 #endif
+      // Scaled line width -- an unset/hairline GC draws each diagonal
+      // segment as exactly 1 physical pixel regardless of scale, making the
+      // check mark look thin/gray instead of a solid stroke (see PLAN.md).
+      dc.setLineWidth(1);
       dc.drawLineSegments(seg,6);
+      dc.setLineWidth(0);
       }
     }
 

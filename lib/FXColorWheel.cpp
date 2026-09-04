@@ -286,6 +286,9 @@ long FXColorWheel::onPaint(FXObject*,FXSelector,void* ptr){
   dc.fillRectangle(dialx,border,dial->getWidth(),dialy-border);
   dc.fillRectangle(dialx,dialy+dial->getHeight(),dial->getWidth(),height-border-dialy-dial->getHeight());
   dc.drawImage(dial,dialx,dialy);
+  // Scaled line width -- an unset/hairline GC draws these bevel outlines at
+  // exactly 1 physical pixel regardless of scale (see PLAN.md).
+  dc.setLineWidth(1);
   dc.setForeground(borderColor);
   dc.drawArc(dialx+1,dialy,d,d,90*64,45*64);
   dc.drawArc(dialx,dialy+1,d,d,135*64,45*64);
@@ -296,6 +299,7 @@ long FXColorWheel::onPaint(FXObject*,FXSelector,void* ptr){
   dc.drawArc(dialx,dialy,d,d,45*64,180*64);
   dc.setForeground(hiliteColor);
   dc.drawArc(dialx,dialy,d,d,225*64,180*64);
+  dc.setLineWidth(0);
   dc.setForeground(FXRGB(255,255,255));
   dc.fillArc(dialx+spotx-3,dialy+spoty-3,7,7,0,360*64);
   dc.setForeground(FXRGB(0,0,0));

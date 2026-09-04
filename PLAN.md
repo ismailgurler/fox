@@ -1,5 +1,432 @@
 # FOX Toolkit Integer Pixel Scaling — Implementation Plan
 
+## Known minor item, not fixed — FXColorRing border has un-antialiased stray pixels
+
+Noticed as tiny dark spots / apparent missing pixels along the color
+wheel's ring border at scale=2. Root cause, in `FXColorRing::updatering()`
+(`lib/FXColorRing.cpp:268-326`, the function that paints the ring's
+gradient into its `dial` image pixel by pixel): the ring/background
+boundary is a **hard, non-antialiased test**
+(`if((r2=rx*rx+ry*ry)<=o2){ ... } else backColor`) — classic naive circle
+rasterization, no fractional-coverage blending. At certain angles this
+naturally produces isolated one-pixel outliers where the boundary crosses
+a pixel cell just the wrong way — a stray pixel qualifying as "inside"
+(or "outside") when all its neighbors don't.
+
+**Confirmed present at scale=1 too, not scale-related**: `updatering()`
+never references `scale` at all -- it works entirely in the dial image's
+own logical coordinates, so any stray pixel sits at a fixed logical (x,y)
+regardless of scale, and `scalePixelsUp()` (the nearest-neighbor
+duplicator used to physically enlarge the dial bitmap) faithfully copies
+whatever's there, artifacts included -- it doesn't introduce new ones.
+Screenshot-compared side by side at scale=1 vs scale=2 to verify. The
+*reason* it's newly noticeable: nearest-neighbor scaling turns a single
+1-logical-pixel outlier into an N x N physical block (4x the area at
+scale=2), and the whole wheel is physically bigger too, so a speck that
+used to be sub-pixel-scale-of-attention now reads as an actual visible
+dot. Not introduced by, or fixable via, anything in the scaling work
+itself -- a pre-existing cosmetic imperfection in the original (unscaled)
+color-ring rasterization, merely made more visible as a side effect of
+*correctly* not blurring anything.
+
+**Not fixed. User's explicit call: log it, move on.** Real fix would mean
+adding actual edge anti-aliasing (supersampling, or fractional-coverage
+blending at the boundary) to `updatering()` -- a genuine but separate,
+self-contained cosmetic improvement, unrelated to the scaling project.
+
+---
+
+## Note — not a bug: stale processes keep icons corrupted until relaunched
+
+User then also reported the eyedropper icon and mode-tab icons in the
+Color Dialog, plus icons in "FOX Image Viewer" (both from
+`tests/bitmapviewer`), still looked wrong after the `FXIcon` fix below.
+Root cause: that `bitmapviewer` process had been running continuously
+since *before* the `FXIcon` double-scaling regression was fixed --
+rebuilding the binary doesn't touch an already-running process, and an
+icon's server-side pixmap is only ever created once
+(`FXImage::create()`/`FXIcon::create()` guard on `if(!xid)`), so icons
+created while the bug was live stayed corrupted in that process for its
+whole remaining lifetime regardless of how many times the code was fixed
+and rebuilt after that. Confirmed by killing and relaunching
+`bitmapviewer` fresh: eyedropper icon, all 5 mode-tab icons, and the main
+wheel all screenshot-confirmed correct immediately. No code change was
+needed or made here. **Lesson**: after a fix that touches icon/image
+rendering, don't just rebuild -- kill and relaunch every already-running
+test process before re-verifying, or a stale one will look like a new bug.
+
+---
+
+## Status (2026-09-04, even later — regression from the FXImage::render() fix, found and fixed)
+
+**Committed as `bdb2042`** (folded into the same commit as the original
+`FXImage::render()` fix below — the intermediate broken state was never a
+good point to split at, so both landed together as the final, correct,
+verified version).
+
+User reported: "Look at the icons in Adie, they have been corrupted after
+you did the FXImage fix." Correct, real regression — introduced by the
+`FXImage::render()` fix in the section below, found within minutes of
+looking at Adie's toolbar/menu icons.
+
+**Root cause**: `FXIcon` (`lib/FXIcon.cpp`) has its own *separate*,
+pre-existing scale-up wrapper in `FXIcon::create()` — unlike a plain
+`FXImage`, an icon has three pixmaps to keep pixel-aligned (color, shape
+mask, etch mask), so `create()` does its own `scalePixelsUp()` +
+temporary width/height inflation spanning the *entire* `render()` call
+(color pixels **and** both masks together), then restores. This was
+already correct and untouched by the earlier fix. But `FXIcon::render()`
+calls `FXImage::render()` internally to do the color-pixel part — and
+once `FXImage::render()` became scale-aware itself, that call saw
+data/width/height *already* inflated by `FXIcon::create()`'s wrapper and
+pixel-doubled them **again**, uploading a doubly-inflated buffer into a
+correctly (singly) sized pixmap. Toolbar/menu icons visibly scrambled;
+the color wheel (a plain `FXImage`, no such wrapper) was unaffected,
+which is why it wasn't caught when the original fix was verified.
+
+**Fix**: split `FXImage::render()` (`lib/FXImage.cpp`, X11 variant) into
+two: `render()` stays the public, scale-aware entry point (unchanged
+behavior for `FXColorRing`/`FXColorWheel`/`FXColorBar`/`FXGradientBar`,
+which call it directly and have no wrapper of their own); the actual
+upload body moved into a new `renderPixels()` (declared protected in
+`include/FXImage.h`) — a raw, scale-oblivious upload of whatever
+data/width/height currently are. `FXIcon::render()`'s internal call
+changed from `FXImage::render()` to `FXImage::renderPixels()`, so it gets
+uploaded exactly once, at whatever size `FXIcon::create()`'s own wrapper
+already set up — restoring the original, correct, pre-regression behavior
+for icons specifically, while keeping the color-wheel fix intact for
+plain `FXImage` users. WIN32 untouched again (its own separate
+`FXIcon::render()`/`FXImage::render()` don't call `renderPixels()` at
+all, consistent with WIN32 being out of scope throughout).
+
+Verified: toolbar icons (File/Edit/Command menus) and menu-item icons
+(Options menu wrench/font icons) screenshot-confirmed crisp and correct
+again at scale=2. Re-verified the color wheel (`tests/bitmapviewer`'s
+Colors button) still renders correctly after this second change — no
+regression from the `render()`/`renderPixels()` split itself. Full clean
+rebuild.
+
+**Lesson for next time**: when making a widely-shared low-level method
+"smarter" (like `render()` gaining scale-awareness), grep for *every*
+class that calls it internally, not just the one that motivated the fix —
+`FXIcon`'s own duplicate wrapper was find-able by inspection beforehand
+(`grep -n "scalePixelsUp" lib/*.cpp` would have shown it immediately) and
+should have been checked as part of the original fix's blast-radius
+review, not caught after the fact by the user re-testing.
+
+---
+
+## Status (2026-09-04, later still — both deferred bugs fixed and verified)
+
+**Committed** — item 1 (`FXImage::render()`) as `bdb2042` (see the
+regression note above — the fix and its follow-up correction landed
+together); item 2 (menu-bar hover bug) as `f3f15cf`.
+
+User asked to prioritize the three known-deferred bugs, then said "do 1
+and 2" (the `FXImage::render()` scaling bug and the menu-bar hover bug —
+the top two of the three). Both fixed and verified this round; the third
+(Adie spinner arrows vs ControlPanel) stays deferred as before, see its
+own section below.
+
+### 1. `FXImage::render()` doesn't scale — fixed
+
+Moved the scale-up logic that used to live only inside `FXImage::create()`
+(pixel-double via `scalePixelsUp(scale)`, temporarily inflate
+`width`/`height` to the physical size, call the internal upload routine,
+restore the logical values) into `FXImage::render()` itself
+(`lib/FXImage.cpp`, the X11/non-WIN32 variant only — see WIN32 note below).
+`render()` now does this scale-up dance around its own upload body, so
+every direct caller gets correct scaling automatically; `create()`
+simplified to just call `render()` unconditionally, no special-casing left.
+
+Verified via `tests/bitmapviewer`'s Colors button (FXColorDialog) at
+scale=2, screenshot-confirmed before/after: the wheel now fills the full
+circle+triangle matching the selector rings exactly — no more small
+gradient confined to a black box. Full rebuild (`cmake --build .`, all
+targets) clean, no errors.
+
+**WIN32 compat, checked explicitly (user asked):** untouched. The edited
+`render()` is entirely inside the `#else // X11` branch of the
+`#ifdef WIN32 ... #else ... #endif` split (verified the exact `#ifdef`/
+`#else`/`#endif` line numbers bracket the change correctly) — the separate
+WIN32 `render()` implementation is a different function body, never
+touched. `create()`'s simplification is also behavior-neutral for WIN32:
+the removed `scalePixelsUp` special-casing was already `#ifndef WIN32`-only,
+so a WIN32 build always just fell through to a plain `render()` call
+before, and still does now, identically. Pre-existing, unrelated gap noted
+for the record: WIN32's `create()` never scaled the pixmap size either
+(`CreateCompatibleBitmap` with no `scale` multiplier) — not fixed, out of
+scope, consistent with this whole project being Linux/X11-only throughout.
+
+### 2. Menu-bar hover-tracking bug — fixed
+
+Root-caused via temporary `fprintf` instrumentation in `FXMenuBar::onEnter/
+onLeave/onMotion/contains()`, `FXMenuTitle::onEnter`, and
+`FXMenuCommand::onEnter` (all removed again before finishing — the fix
+itself has no debug output left in it). Actual mechanism, precisely:
+
+- `FXMenuBar::contains()` only ever recognizes two regions: the bar strip
+  itself (`FXComposite::contains()`) and the currently-focused
+  `FXMenuTitle`'s own small button rectangle (`getFocus()->contains(x,y)`).
+  It has **never** known about the actual posted dropdown pane's geometry
+  at all — the pane (`FXPopup`) is a separate top-level shell, not a child
+  rectangle of the bar in the sense `contains()` checks.
+- Confirmed empirically (debug print comparing `pane->getX()/getY()`
+  against the same test point in the "bar's parent" frame): the pane's
+  position is relative to the menu title's own top-level ancestor, a
+  **different coordinate frame** than what `onEnter`/`onLeave`/`onMotion`
+  compute for their `contains()` calls (relative to the bar's immediate
+  parent) — comparing them directly, even if `contains()` did try, would
+  have been wrong without an explicit frame conversion.
+- Because of this gap, hovering over the dropdown's own items (below the
+  bar) always evaluates `contains()` as false. In the simple case (click
+  a title, move straight down), this doesn't matter in practice because
+  the *first* motion, while the mouse is still physically over the title
+  button, triggers a correct early `ungrab()` before the mouse ever
+  reaches the dropdown -- the bar's active `XGrabPointer`
+  (`owner_events=false`) is released in time, so subsequent events route
+  normally to the actual item widgets. But rapidly crossing to a sibling
+  title and back (Options → View → Options, the user's repro) generates
+  crossing events with X11 modes `NotifyGrab`/`NotifyUngrab` instead of
+  `NotifyNormal` for that particular re-entry -- and `onEnter`/`onLeave`'s
+  grab-release logic is gated behind `code==CROSSINGNORMAL`, so that
+  window to release the grab early gets skipped. The grab then stays held
+  all the way down into the dropdown, where `contains()`'s blind spot
+  (above) means nothing ever releases it -- `owner_events=false` means the
+  bar keeps receiving every event itself instead of the actual
+  `FXMenuCommand` item under the cursor, so that item's own `onEnter`
+  never fires and it never highlights.
+
+**Fix**: added `FXMenuBar::insidePane(FXint rootx,FXint rooty)`
+(`lib/FXMenuBar.cpp`, declared private in `include/FXMenuBar.h`) -- checks
+whether a point, given in root/screen coordinates, falls within the
+currently-posted pane's bounds, converting the pane's own origin to root
+coordinates via `pane->translateCoordinatesTo(...,getApp()->getRootWindow(),0,0)`
+(root/screen is the one frame both the event and the pane can be compared
+in unambiguously, sidestepping the frame mismatch above). `onEnter`,
+`onLeave`, and `onMotion` now OR this into their existing `contains()`
+checks, using `ev->root_x`/`root_y` (already available on every `FXEvent`,
+already correctly unscaled). Purely additive -- `contains(...) ||
+insidePane(...)` can only make ungrab *more* likely to fire than before,
+never less, so every previously-working path (the simple direct-click
+case) is structurally guaranteed unaffected; only fixes the specific gap.
+
+Verified by reproducing the *exact* broken sequence from before the fix
+(Options → hover View → hover back to Options → hover down onto
+"Font..."): item now highlights correctly, and — confirmed further, not
+just cosmetic — actually **clicking** it at that point opens the real
+"Change Font" dialog, proving the fix restores genuine event delivery to
+the item, not just a visual side effect. Full rebuild clean.
+
+---
+
+## Known issue, deliberately deferred — FXImage::render() doesn't scale (color wheel etc.)
+
+**FIXED — see the "Status (2026-09-04, later still)" section above.
+Left below for the historical root-cause record.**
+
+Found investigating "the color picker wheel in Adie looks off" (Adie
+Preferences → Colors → double-click a swatch → Color Dialog; reproduced
+directly via `tests/bitmapviewer`'s Colors button, screenshot-confirmed at
+scale=2). The wheel graphic renders small and correctly-colored but confined
+to roughly the top-left `1/scale` fraction of its own widget area, sitting
+inside a big black box, with the (correctly-scaled) selector rings/circles
+drawn around it at full size — bitmap and vector overlay visibly mismatched.
+
+**Root cause, confirmed by reading `lib/FXImage.cpp`, not FXColorRing/
+FXColorWheel's own code, and unrelated to any of this session's earlier
+`setLineWidth()` fixes:**
+- `FXImage::create()` correctly handles scale: it builds a physically
+  `width*scale x height*scale` pixmap, then *temporarily* pixel-doubles the
+  data via `scalePixelsUp(scale)` and lies about `width`/`height` (inflates
+  them to the physical size) just long enough to call the internal
+  `render()` upload routine, then restores the real logical values
+  afterward (see `FXImage::create()`, `lib/FXImage.cpp:338-391`).
+- That scale-up trick is private to `create()`. `FXImage::render()` itself
+  — a **public** method, meant to be called directly by any widget that
+  regenerates its own pixel content after the image already exists — has
+  no scale-awareness at all: it just uploads `width x height` *logical*
+  pixels (`XPutImage`/`XShmPutImage(...,0,0,0,0,width,height)`,
+  `lib/FXImage.cpp:1535`/`1548`) into the top-left corner of the
+  physically-larger pixmap, leaving the rest untouched/uninitialized.
+- `FXColorRing`/`FXColorWheel`'s `dial` image is created once at
+  construction, then on every resize the widget calls `dial->resize(...)`
+  followed by `dial->render()` **directly** (`FXColorRing.cpp:243-252`,
+  similarly in `FXColorWheel.cpp`) to repaint the gradient at the new size
+  — bypassing `create()`'s scale-up wrapper entirely, hitting the bug
+  above every time the widget is laid out at scale != 1.
+
+**Blast radius — every widget that calls `->render()` directly to refresh
+its own generated pixel content, not just the color wheel:**
+- `lib/FXColorRing.cpp:252`
+- `lib/FXColorWheel.cpp:161`
+- `lib/FXColorBar.cpp:123,336,348` (3 call sites)
+- `lib/FXGradientBar.cpp:265`
+
+**Proposed fix (not implemented):** move the scale-up logic that's
+currently inlined only in `create()` (the `scalePixelsUp()` call +
+temporary width/height swap) into `render()` itself, so every direct
+caller gets correct scaling automatically and consistently instead of
+requiring each of the 5 call sites to know about the quirk. `create()`
+would then just call the now-scale-aware `render()` without its own
+special case. This is core, widely-relied-upon library code (every
+image/icon in the toolkit goes through `FXImage::create()`/`render()`), so
+it's a bigger-blast-radius change than the earlier surgical
+`setLineWidth()` fixes — worth doing carefully, with real before/after
+verification across more than just the color wheel, when picked back up.
+
+---
+
+## Known issue, deliberately deferred — Adie spinner arrows vs ControlPanel
+
+**Not fixed. User's explicit call: note it here, revisit later.**
+
+Adie's numeric spinner arrows (e.g. Options → Preferences → Editor →
+"Mouse wheel lines") look considerably smaller than ControlPanel's (e.g.
+General tab → "Typing Speed") — same `FXSpinner`/`FXArrowButton` widget
+class, same compiled library code, visibly different size. Root cause is
+two separate things stacking:
+
+1. **`FXSpinner` has no size of its own** — it stretches to fill whatever
+   box its parent layout hands it. Adie's Preferences dialog
+   (`adie/Preferences.cpp:62`, the `matrix2` `FXMatrix` with
+   `PACK_UNIFORM_HEIGHT`) and ControlPanel's General tab
+   (`controlpanel/ControlPanel.cpp`) each specify their own padding around
+   the spinner independently — Adie passes explicit `2,2,1,1`
+   (`padleft,padright,padtop,padbottom`) on every spinner/textfield in that
+   matrix; ControlPanel doesn't override padding, so it gets `FXSpinner`'s
+   larger built-in default. Measured directly from screenshots at scale=2:
+   Adie's spinner box is **14 physical px tall**, ControlPanel's is **16**
+   — only a 1-logical-pixel difference.
+2. **`FXArrowButton::onPaint()`'s triangle-sizing clamp is a hard cutoff,
+   not a graceful shrink** (`lib/FXArrowButton.cpp`, the
+   `q=(ww-1)|1; if((q>>1)>hh) q=(hh<<1)-1; ww=q; hh=q>>1;` block for
+   `ARROW_UP`/`ARROW_DOWN`). It doesn't just cap the triangle to fit the
+   available height — clamping `q` and then re-deriving height as `q>>1`
+   rounds down and loses a further unit versus directly using the
+   available height, so crossing the clamp threshold by even 1px produces
+   a disproportionately tiny triangle rather than a barely-noticeable one.
+   That's why a 1-logical-pixel box difference between the two dialogs
+   turns into a dramatic, easy-to-spot size difference instead of
+   something nobody would ever notice.
+
+Two independent fix paths, discussed with the user but not yet chosen:
+- **A — Adie's layout**: bump the `padtop`/`padbottom` on the
+  Preferences-dialog spinners/textfields (currently `...1,1)`) enough to
+  clear the clamp threshold. Small, contained to that one matrix, purely
+  cosmetic (rows get ~1-2 logical px taller), fixes exactly what was seen.
+- **B — the clamp itself**: make `FXArrowButton`'s shrink path use the
+  full available height directly instead of clamp-then-rederive, so any
+  future tight-box scenario (any app, any dialog) degrades gracefully
+  instead of collapsing. Library-wide change, touches every arrow
+  button/spinner everywhere, no effect on the current no-clamp case
+  (ControlPanel's, today) but changes behavior for anything that does hit
+  the clamp.
+
+Revisit both when picking this back up — B is probably worth doing
+regardless of A, since it's a correctness improvement to shared code with
+no downside for the common case, but hasn't been implemented or verified
+yet.
+
+---
+
+## Status (2026-09-04 — hairline-stroke sweep continued, arrow asymmetry, menu-bar hover bug)
+
+**Committed**: hairline drawLineSegments/drawArc fixes (item 1 below) as
+`66ea27d`; the arrow asymmetry fix (item 3) as `9bc59de`. The menu-bar
+hover bug (item 4) was diagnosed here but fixed later — see the "Status
+(2026-09-04, later still)" section above for the actual fix, `f3f15cf`.
+
+Continuing the user's own play-testing at scale=2, found via direct
+interaction with Adie (not code audit):
+
+1. **Checkbox tick looked gray, radio border looked 1px.** Same root cause
+   as the earlier `drawRectangle` hairline bug (`455c61c`/`1a34896`), but
+   hitting `drawLineSegments()`/`drawArc()` instead: an unset/hairline GC
+   line width stays exactly 1 physical pixel regardless of scale, so a
+   diagonal check-mark stroke or a circle outline doesn't get any bolder at
+   scale=2 the way filled rectangles do. Fixed with `dc.setLineWidth(1)`
+   before the stroke / `setLineWidth(0)` after (mirrors the pattern
+   `FXGauge`/`FXKnob` already used correctly for their own arcs) in:
+   - `lib/FXCheckButton.cpp` (checkmark) — verified (Adie Replace dialog,
+     "Wrap" checkbox: solid black tick, was gray/thin)
+   - `lib/FXMenuRadio.cpp` (the circle the user actually pointed at:
+     Options → Tab Stops) — verified (solid gray ring, was 1px hairline)
+   - `lib/FXMenuCheck.cpp` (Options → Insert Tabs — a *different* widget
+     than `FXCheckButton`, same bug, initially missed) — verified
+   - `lib/FXColorRing.cpp`, `lib/FXColorWheel.cpp`, `lib/FXProgressBar.cpp`
+     (bevel/outline arcs, same missing-`setLineWidth` pattern found by
+     auditing every other `drawArc`/`drawLineSegments` call in `lib/`) —
+     fixed by inspection, not separately screenshotted (not reachable
+     through Adie/ControlPanel)
+   `FXGauge`/`FXKnob` were already correct (they call `setLineWidth()` with
+   a real value, which `FXDCWindow::setLineWidth()` scales properly) — nothing
+   to do there. Left the much larger `drawLine`/`drawLines` surface
+   (`FXDial`, `FXRuler`, `FXSlider`/`FXRealSlider`/`FXRangeSlider`,
+   `FXTabItem`, `FXHeader`, `FXToolBarTab`, `FXMDIButton`, `FXGradientBar`)
+   unaudited — many of those are *meant* to be thin 1px accents (ruler
+   ticks, tab-corner miters), so "hairline" isn't automatically a bug there;
+   revisit only if something specific turns up.
+
+2. **Spinner arrows "look small" — investigated, not a bug.** Compared the
+   `FXArrowButton` up/down triangle-to-button proportion at scale=1 vs
+   scale=2 side by side: identical ratio at both. `fillPolygon()` already
+   scales correctly (`FXDCWindow.cpp` `scaledPoints()`). This is just how
+   FOX has always drawn these triangles — modest relative to their button —
+   and it reads as more noticeable now that neighboring checkboxes/radios
+   got visibly bolder strokes from fix #1. No change made.
+
+3. **Arrow-button up/down asymmetry — real, pre-existing, fixed.** Found
+   while investigating the user's report that Command → Shell Command's
+   history up/down arrows "are not consistent" (down looked right, up
+   looked oversized). `FXArrowButton::onPaint()`'s `ARROW_UP` triangle was
+   never symmetric with `ARROW_DOWN` in upstream FOX -- apex at `yy-1` and a
+   full-width `[xx, xx+ww]` base (vs. `DOWN`'s apex at `yy+hh` and a
+   `[xx+1, xx+ww-1]` base) made `UP` 2 logical px wider and 1 taller. `LEFT`/
+   `RIGHT` were already exact mirrors of each other -- only `UP`/`DOWN`
+   wasn't. At scale=1 that's a 2-3px difference, easy to miss; doubled to
+   4-6 physical px at scale=2, it was obvious. Fixed by making `UP` the
+   exact vertical mirror of `DOWN` in `lib/FXArrowButton.cpp`. Verified in
+   Adie's Execute Command dialog (Command → Shell Command...): both arrows
+   now the same size, at scale=1 and scale=2.
+
+4. **Menu-bar hover-tracking bug — confirmed, real, root cause not yet
+   found, deliberately not fixed.** *(FIXED later the same day — see the
+   "Status (2026-09-04, later still)" section at the top of this file for
+   the actual root cause and fix; left below for the original repro
+   record.)* Repro (Adie, scale=2): click "Options"
+   (opens its dropdown) → move the mouse right along the menu bar, staying
+   at bar level, onto "View" (this legitimately hot-tracks and swaps the
+   open dropdown to View's — normal menu-bar behavior) → move back left
+   onto "Options" (dropdown correctly swaps back to Options') → move down
+   into Options' item list → **item hover-highlighting no longer fires**
+   (the cursor sits squarely on "Preferences..." but no highlight bar
+   appears; verified via screenshot + exact pixel-coordinate check). A
+   control case with the same coordinates but skipping the trip through
+   "View" highlights correctly, isolating the trigger to that round-trip.
+   Re-ran the *exact* same sequence at scale=1 with every intermediate step
+   individually screenshotted and verified (Options open → View open →
+   back to Options open → down onto Preferences) — **does not reproduce at
+   scale=1**. So this is scale-dependent, meaning it's plausibly connected
+   to this project's own event-coordinate chokepoints rather than a
+   pre-existing upstream FOX bug, though that isn't proven.
+   Investigated but did not find the exact trigger: `MotionNotify` correctly
+   unscales `win_x`/`win_y` (`FXApp.cpp`); `EnterNotify`/`LeaveNotify`
+   unscale `root_x`/`root_y` and compute `win_x`/`win_y` via
+   `translateCoordinatesFrom()`, a purely logical widget-tree walk that
+   looks correct on inspection. Suspect `FXMenuBar`'s own grab/ungrab state
+   machine (`onEnter`/`onLeave`/`onMotion`/`contains()` in
+   `lib/FXMenuBar.cpp`) instead -- `FXMenuBar::contains()` in particular
+   compares coordinates that look like they may be in the wrong coordinate
+   frame against `getFocus()->contains()` -- but this is not confirmed as
+   the actual trigger, only a code-reading suspicion. Deliberately not
+   fixed: menu grab/focus logic is shared by every menu bar and popup in
+   the toolkit, and a guess-based fix here carries real regression risk.
+   User's explicit call: note it here, move on, revisit later with proper
+   trace instrumentation rather than guessing.
+
+---
+
 ## Status (2026-09-03, even later — "Before Phase 4")
 
 Four follow-ups the user asked for explicitly, all done:

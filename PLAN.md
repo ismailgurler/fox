@@ -1,5 +1,118 @@
 # FOX Toolkit Integer Pixel Scaling — Implementation Plan
 
+## Future work, discussed and settled — not yet started
+
+Two ideas the user raised for future sessions. Both discussed in depth
+before writing anything down; decisions below reflect where that
+discussion landed, not just the initial proposal.
+
+### A. Derive scale from `Xft.dpi` instead of (or alongside) `SETTINGS/scale`
+
+Right now the scale factor comes only from FOX's own registry entry
+(`SETTINGS/scale` in `fox.rc`, editable via ControlPanel's spinner, or
+overridden by `-scale` on the command line) — disconnected from whatever
+DPI the rest of the desktop is actually configured for.
+
+**Formula, settled**: `scale = floor(Xft.dpi / 96)`. 96 DPI is the
+standard Xft/X11 baseline — what Xft itself falls back to when the
+resource is unset, and what GTK/Qt use for their own scale computation
+from the same resource — so this keeps FOX's integer crossover points
+aligned with the rest of the desktop at the same `Xft.dpi` value. Pure
+integer truncation is deliberate: FOX only supports integer scaling, so
+any fractional remainder (e.g. 144 DPI -> 1.5 -> floor 1) is simply
+dropped, on purpose -- other toolkits that *do* support fractional
+scaling are free to use the same resource's fractional value for their
+own smoother scaling; FOX intentionally doesn't. Known, accepted
+consequence: DPI 96-191 all collapse to 1x, so e.g. a 144 DPI (150%)
+laptop setup gets no FOX-side scaling at all -- an inherent gap of an
+integer-only model, not a bug, worth a code comment when implemented so
+it doesn't look like an oversight later.
+
+**Two genuinely separate pieces of work, not one**:
+
+1. **Read `Xft.dpi` at startup** (small). Same point `SETTINGS/scale` is
+   already read, in `FXApp::init()`. Use `XrmGetResource`/
+   `XResourceManagerString` to query the resource, apply the formula
+   above. Precedence still to decide: `-scale` flag (always wins) ->
+   `SETTINGS/scale` *if the user has explicitly set it* -> Xft.dpi-
+   derived -> default 1. The open question is how to represent
+   "explicitly set" vs. "never touched, defaulted" for `SETTINGS/scale`,
+   since there's currently no way to distinguish the two -- likely needs
+   a sentinel (unset/-1 meaning "derive from Xft.dpi instead") and a
+   corresponding "Auto (from Xft.dpi)" option in ControlPanel's spinner,
+   rather than a plain number that always pins the scale once touched.
+   Not yet decided which of those UX shapes is wanted.
+
+2. **Live re-scale via an XSettings daemon, without restarting** (large,
+   separate effort). The entire toolkit currently reads `scale` once and
+   assumes it's constant for the process's lifetime -- geometry, every
+   physically-sized pixmap (icons, the color wheel, cursors if that ever
+   happens), font metrics, all computed once. Making that live would mean
+   re-triggering a full `recalc()`/resize cascade across every open
+   window, re-creating every physical pixmap, and re-deriving every
+   font's display size mid-session -- essentially redoing much of what
+   `create()` does, but on already-realized windows. Real architecture
+   work on its own; explicitly not a follow-on task to item 1 above, and
+   not scoped further yet.
+
+### B. Native BDF bitmap font support (alongside the existing `.fon` parser)
+
+Motivation: `.fon` (Windows NE/FNT) isn't an open standard, even though
+the format is documented and our parser is FOSS. BDF (Glyph Bitmap
+Distribution Format) is an actual open, plain-text, fully-documented
+standard, and the canonical format for open-source bitmap/console fonts
+(Terminus, Spleen, Tamsyn, etc.).
+
+**Shape of the work, settled**: a new BDF parser feeding the *existing*
+`FXFntFace`/`FXFntGlyph` structs and the *existing* `drawFntText()`
+renderer (`lib/xfntface.h`, `lib/FXFont.cpp`, `lib/FXDCWindow.cpp`)
+completely unchanged -- not a new subsystem, not a generalized/renamed
+metric model, no struct changes going in. `.fon` "works flawlessly" as
+it is; the goal is BDF working exactly the same way, same pixel-perfect
+non-antialiased rendering, same fields, just a different parser feeding
+them. Reasoning for a custom parser rather than routing through Xft/
+FreeType's own BDF support (FreeType does have a BDF driver): believed
+(not yet re-confirmed in this discussion) to be the same reason `.fon`
+has its own parser instead of using FreeType's `winfonts` driver --
+guaranteeing pixel-perfect, non-antialiased output at exact integer
+multiples, bypassing whatever hinting/antialiasing Xft's normal pipeline
+might otherwise apply even to a bitmap-sourced glyph.
+
+**Metric mapping, settled**: `FXFntFace`'s existing fields
+(`pixHeight`/`ascent`/`maxWidth`/`avgWidth`) are already the complete
+metric model the rendering pipeline actually consumes -- confirmed by
+checking `fntParseResource()` (`lib/FXFont.cpp`), which doesn't even
+read `dfInternalLeading` from the `.fon` header today despite the byte
+being right there (offset `0x4C`) unused, and nothing breaks. So no
+"internal leading" field, for either format -- it would be data parsed
+and never consumed. BDF's `FONTBOUNDINGBOX` height and `FONT_ASCENT`
+property map directly onto `pixHeight`/`ascent`, same as `.fon`'s header
+fields do today.
+
+**Deliberately deferred, not blocking**: BDF's per-glyph `BBX` can
+express a real x/y ink-offset for a glyph (unlike `.fon`, where glyphs
+are always flush in their cell -- `FXFntGlyph` has no offset fields at
+all today). Rather than add them preemptively, start with the same
+flush-glyph assumption `.fon` already uses (zero `FXFntGlyph` changes),
+since the realistic target fonts for this (monospace console/terminal
+BDF fonts) are typically authored the same way -- glyphs flush, zero
+offset in practice. Add offset fields only if testing against a real
+downloaded `.bdf` file actually turns up one that needs it, matching the
+same empirical-validation approach that proved out the `.fon` parser
+originally (tested against a real downloaded MS Sans Serif file, not
+solved for every theoretical case upfront).
+
+**OTB explicitly deprioritized**: full binary SFNT container (`EBLC`/
+`EBDT` tables), closer in complexity to the `.fon` work than to BDF, far
+less common in the FOSS ecosystem, and -- because FreeType has native
+embedded-bitmap-strike support -- plausibly already works through the
+existing Xft path with zero new code, unlike BDF. Recommended next step
+if this is ever picked up: test that empirically first, cheaply, before
+writing anything, rather than assuming custom parser work is needed the
+way it was for `.fon`.
+
+---
+
 ## Known minor item, not fixed — FXColorRing border has un-antialiased stray pixels
 
 Noticed as tiny dark spots / apparent missing pixels along the color

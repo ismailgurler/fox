@@ -212,6 +212,7 @@
 #include "FXColorWheel.h"
 #include "FXTextField.h"
 #include "FXButton.h"
+#include "CYTButton.h"
 #include "FXPicker.h"
 #include "FXToggleButton.h"
 #include "FXTriStateButton.h"

@@ -240,7 +240,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   new FXLabel(matrix1,tr("Tip Background Color"),nullptr,LAYOUT_CENTER_Y);
 
   new FXColorWell(matrix1,FXRGB(0,0,255),&target_hilite,FXDataTarget::ID_VALUE);
-  new FXLabel(matrix1,tr("Hilite Color"),nullptr,LAYOUT_CENTER_Y);
+  new FXLabel(matrix1,tr("Highlight Color"),nullptr,LAYOUT_CENTER_Y);
 
   new FXColorWell(matrix1,FXRGB(0,0,255),&target_shadow,FXDataTarget::ID_VALUE);
   new FXLabel(matrix1,tr("Shadow Color"),nullptr,LAYOUT_CENTER_Y);

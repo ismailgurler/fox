@@ -83,7 +83,7 @@ const ColorTheme ColorThemes[]={
   {"Pale Gray"         ,FXRGB(214,214,214),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,  0),FXRGB(255,255,255)},
   {"Plastik"           ,FXRGB(239,239,239),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(103,141,178),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(103,141,178),FXRGB(255,255,255)},
   {"Pumpkin"           ,FXRGB(238,216,174),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(205,133, 63),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(205,133, 63),FXRGB(255,255,255)},
-  {"Redmond 95"        ,FXRGB(195,195,195),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255)},
+  {"Redmond 95"        ,FXRGB(195,195,195),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,255),FXRGB(128,128,128),true,true},
 //|--------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------|
 //|        Name        |        Base      |       Border     |       Back       |      Fore        |      Selback     |      Selfore     |      Tipback     |     Tipfore      |      Menuback    |      Menufore    |
 //|--------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------|
@@ -238,6 +238,12 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
 
   new FXColorWell(matrix1,FXRGB(0,0,255),&target_tipback,FXDataTarget::ID_VALUE);
   new FXLabel(matrix1,tr("Tip Background Color"),nullptr,LAYOUT_CENTER_Y);
+
+  new FXColorWell(matrix1,FXRGB(0,0,255),&target_hilite,FXDataTarget::ID_VALUE);
+  new FXLabel(matrix1,tr("Hilite Color"),nullptr,LAYOUT_CENTER_Y);
+
+  new FXColorWell(matrix1,FXRGB(0,0,255),&target_shadow,FXDataTarget::ID_VALUE);
+  new FXLabel(matrix1,tr("Shadow Color"),nullptr,LAYOUT_CENTER_Y);
 
   // Sample gui fragment showing colors
   FXVerticalFrame* frame2=new FXVerticalFrame(hframe1,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING,0,0);
@@ -567,6 +573,8 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   target_tipback.connect(theme_current.tipback,this,ID_COLORS);
   target_menufore.connect(theme_current.menufore,this,ID_COLORS);
   target_menuback.connect(theme_current.menuback,this,ID_COLORS);
+  target_hilite.connect(theme_current.hilite,this,ID_COLORS);
+  target_shadow.connect(theme_current.shadow,this,ID_COLORS);
 
   // Miscellaneous data target assocations
   target_typingspeed.connect(typingSpeed);
@@ -937,6 +945,15 @@ long FXDesktopSetup::onColorTheme(FXObject*,FXSelector,void* ptr){
     theme_current.tipback  = theme_selected->tipback;
     theme_current.menufore = theme_selected->menufore;
     theme_current.menuback = theme_selected->menuback;
+
+    // Explicit override if this theme defines one (e.g. Redmond 95's real
+    // Win95 #FFFFFF/#808080); otherwise fall back to the same computed
+    // blend every theme used before these two fields existed, so the
+    // preview swatch always shows a real color instead of black -- see
+    // PLAN.md, chicagouireplica branch.
+    theme_current.hilite = theme_selected->hasHilite ? theme_selected->hilite : makeHiliteColor(theme_selected->base);
+    theme_current.shadow = theme_selected->hasShadow ? theme_selected->shadow : makeShadowColor(theme_selected->base);
+
     setupColors();
     }
   return 1;
@@ -1052,6 +1069,10 @@ void FXDesktopSetup::initColors(){
     theme_user.menuback=theme_current.menuback;
     theme_user.tipfore=theme_current.tipfore;
     theme_user.tipback=theme_current.tipback;
+    theme_user.hilite=theme_current.hilite;
+    theme_user.shadow=theme_current.shadow;
+    theme_user.hasHilite=true;
+    theme_user.hasShadow=true;
     scheme=list->getNumItems();
     list->appendItem(tr("Current"),nullptr,&theme_user);
     }
@@ -1064,8 +1085,11 @@ void FXDesktopSetup::initColors(){
 
 // Update sampler
 void FXDesktopSetup::setupColors(){
-  FXColor shadow=makeShadowColor(theme_current.base);
-  FXColor hilite=makeHiliteColor(theme_current.base);
+  // theme_current.hilite/shadow are already fully resolved by whoever set
+  // theme_current (onColorTheme(), readSettingsFile(), or the user editing
+  // the Hilite/Shadow swatches directly) -- no fallback needed here.
+  FXColor shadow=theme_current.shadow;
+  FXColor hilite=theme_current.hilite;
 
   tabitem->setBorderColor(theme_current.border);
   tabitem->setBaseColor(theme_current.base);
@@ -1286,8 +1310,8 @@ FXbool FXDesktopSetup::readSettingsFile(const FXString& file){
     theme_current.border=desktopsettings.readColorEntry("SETTINGS","bordercolor",getApp()->getBorderColor());
     theme_current.back=desktopsettings.readColorEntry("SETTINGS","backcolor",getApp()->getBackColor());
     theme_current.fore=desktopsettings.readColorEntry("SETTINGS","forecolor",getApp()->getForeColor());
-    //hilite=desktopsettings.readColorEntry("SETTINGS","hilitecolor",getApp()->getHiliteColor());
-    //shadow=desktopsettings.readColorEntry("SETTINGS","shadowcolor",getApp()->getShadowColor());
+    theme_current.hilite=desktopsettings.readColorEntry("SETTINGS","hilitecolor",getApp()->getHiliteColor());
+    theme_current.shadow=desktopsettings.readColorEntry("SETTINGS","shadowcolor",getApp()->getShadowColor());
     theme_current.selfore=desktopsettings.readColorEntry("SETTINGS","selforecolor",getApp()->getSelforeColor());
     theme_current.selback=desktopsettings.readColorEntry("SETTINGS","selbackcolor",getApp()->getSelbackColor());
     theme_current.tipfore=desktopsettings.readColorEntry("SETTINGS","tipforecolor",getApp()->getTipforeColor());
@@ -1364,8 +1388,8 @@ FXbool FXDesktopSetup::writeSettingsFile(const FXString& file){
   desktopsettings.writeColorEntry("SETTINGS","bordercolor",theme_current.border);
   desktopsettings.writeColorEntry("SETTINGS","backcolor",theme_current.back);
   desktopsettings.writeColorEntry("SETTINGS","forecolor",theme_current.fore);
-  desktopsettings.writeColorEntry("SETTINGS","hilitecolor",makeHiliteColor(theme_current.base));
-  desktopsettings.writeColorEntry("SETTINGS","shadowcolor",makeShadowColor(theme_current.base));
+  desktopsettings.writeColorEntry("SETTINGS","hilitecolor",theme_current.hilite);
+  desktopsettings.writeColorEntry("SETTINGS","shadowcolor",theme_current.shadow);
   desktopsettings.writeColorEntry("SETTINGS","selforecolor",theme_current.selfore);
   desktopsettings.writeColorEntry("SETTINGS","selbackcolor",theme_current.selback);
   desktopsettings.writeColorEntry("SETTINGS","tipforecolor",theme_current.tipfore);

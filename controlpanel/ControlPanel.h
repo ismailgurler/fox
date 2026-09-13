@@ -35,6 +35,13 @@ struct ColorTheme {
   FXColor       tipfore;
   FXColor       menuback;
   FXColor       menufore;
+  FXColor       hilite;       // Explicit override; meaningless unless hasHilite is true
+  FXColor       shadow;       // Explicit override; meaningless unless hasShadow is true
+  FXbool        hasHilite;    // True if this theme defines an explicit hilite (e.g. real Win95's
+  FXbool        hasShadow;    // hardcoded #FFFFFF/#808080); false means fall back to
+                              // makeHiliteColor(base)/makeShadowColor(base), same as every
+                              // theme did before these two fields existed -- see PLAN.md,
+                              // chicagouireplica branch.
   };
 
 
@@ -151,6 +158,8 @@ private:
   FXDataTarget       target_tipback;
   FXDataTarget       target_menufore;
   FXDataTarget       target_menuback;
+  FXDataTarget       target_hilite;
+  FXDataTarget       target_shadow;
   FXDataTarget       target_typingspeed;        // Time targets
   FXDataTarget       target_clickspeed;
   FXDataTarget       target_scrollspeed;

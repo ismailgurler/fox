@@ -146,6 +146,7 @@ private:
   FXbool             hinting;
   FXbool             autohint;
   FXbool             antialias;
+  FXbool             cytEngraveDisabled; // Coyote Toolkit (CYTButton): engraved (Win2000) vs flat gray (Win95/98) disabled text
   FXFileBinding      filebinding;       // Current file binding
 private:
   FXDataTarget       target_base;                // Color targets
@@ -180,6 +181,7 @@ private:
   FXDataTarget       target_hinting;            // Xft font hinting
   FXDataTarget       target_autohint;           // Xft autohint
   FXDataTarget       target_antialias;          // Xft anti-aliasing
+  FXDataTarget       target_cytengravedisabled; // CYTButton: engraved vs flat gray disabled text
   FXDataTarget       target_filebinding_description;
   FXDataTarget       target_filebinding_command;
   FXDataTarget       target_iconpath;

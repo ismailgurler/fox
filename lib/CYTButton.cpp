@@ -67,8 +67,13 @@ FXIMPLEMENT(CYTButton,FXButton,CYTButtonMap,ARRAYNUMBER(CYTButtonMap))
 // style Coyote widget simply won't inherit from CYTButton, the same way
 // Win95's toolbar buttons are a different window class entirely, not a
 // flag on the same one (see PLAN.md, chicagouireplica branch).
+// Disabled-text style (flat Win95/98 gray vs. engraved Win2000) is read
+// once here from the registry, same "takes effect next app launch"
+// convention as ControlPanel's other SETTINGS-section entries (e.g. UI
+// Scaling). See the doc comment in CYTButton.h.
 CYTButton::CYTButton(FXComposite* p,const FXString& text,FXIcon* ic,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
-  FXButton(p,text,ic,tgt,sel,opts|BUTTON_DEFAULT,x,y,w,h,pl,pr,pt,pb){
+  FXButton(p,text,ic,tgt,sel,opts|BUTTON_DEFAULT,x,y,w,h,pl,pr,pt,pb),
+  engraveDisabled(getApp()->reg().readBoolEntry("SETTINGS","cytengraveddisabled",false)){
   }
 
 
@@ -169,15 +174,23 @@ long CYTButton::onPaint(FXObject*,FXSelector,void* ptr){
   if(!label.empty()){
     dc.setFont(font);
     if(!isEnabled()){
-      // Disabled: flat gray, single pass -- this is the real Win95 BUTTON
-      // window class's disabled text (SetTextColor(COLOR_GRAYTEXT) then one
-      // DrawText). The "engraved" hilite+shadow double-draw is what the
-      // separate Toolbar common control (DrawState/DSS_DISABLED) uses for
-      // controls like Explorer's Back/Forward/Up One Level -- a different
-      // control class, not a variant of this one. See PLAN.md,
-      // chicagouireplica branch.
-      dc.setForeground(shadowColor);
-      dc.drawText(x,y+ascent,label);
+      if(engraveDisabled){
+        // Engraved (Windows 2000 style): hiliteColor copy offset +1,+1
+        // behind a shadowColor copy on top -- Win2000 changed the standard
+        // BUTTON control to match what the Toolbar common control always
+        // did (see engraveDisabled's doc comment in CYTButton.h).
+        dc.setForeground(hiliteColor);
+        dc.drawText(x+1,y+1+ascent,label);
+        dc.setForeground(shadowColor);
+        dc.drawText(x,y+ascent,label);
+        }
+      else{
+        // Flat gray, single pass (Windows 95/98 style) -- the real Win95
+        // BUTTON window class's disabled text (SetTextColor(COLOR_GRAYTEXT)
+        // then one DrawText). See PLAN.md, chicagouireplica branch.
+        dc.setForeground(shadowColor);
+        dc.drawText(x,y+ascent,label);
+        }
       }
     else if(pressed){
       dc.setForeground(textColor);

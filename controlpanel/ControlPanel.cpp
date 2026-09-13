@@ -509,6 +509,10 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   new FXLabel(matrix3,tr("Xft font anti-aliasing"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
   xftAntialiasCheck=new FXCheckButton(matrix3,FXString::null,&target_antialias,FXDataTarget::ID_VALUE);
 
+  // Coyote Toolkit (CYTButton): disabled-text style
+  new FXLabel(matrix3,tr("Engrave disabled button text\t\tWindows 2000 style (hilite+shadow); unchecked is Windows 95/98 style (flat gray). Affects Coyote Toolkit (CYTButton) widgets. Takes effect the next time an application starts."),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
+  new FXCheckButton(matrix3,FXString::null,&target_cytengravedisabled,FXDataTarget::ID_VALUE);
+
   // Close button etc.
   new FXSeparator(main,SEPARATOR_GROOVE|LAYOUT_FILL_X);
   FXHorizontalFrame *closebox=new FXHorizontalFrame(main,LAYOUT_BOTTOM|LAYOUT_FILL_X,0,0,0,0,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING);
@@ -560,6 +564,10 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   autohint=false;
   antialias=true;
 
+  // Coyote Toolkit (CYTButton): disabled-text style; initial value mirrors
+  // what CYTButton itself defaults to when the registry key is unset.
+  cytEngraveDisabled=getApp()->reg().readBoolEntry("SETTINGS","cytengraveddisabled",false);
+
   filebinding.flags=0;
 
   // Color data targets associations
@@ -597,6 +605,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   target_hinting.connect(hinting);
   target_autohint.connect(autohint);
   target_antialias.connect(antialias);
+  target_cytengravedisabled.connect(cytEngraveDisabled);
 
   // File data target associations
   target_filebinding_description.connect(filebinding.description);
@@ -1370,6 +1379,9 @@ FXbool FXDesktopSetup::readSettingsFile(const FXString& file){
     hinting=desktopsettings.readBoolEntry("Xft","hinting",true);
     autohint=desktopsettings.readBoolEntry("Xft","autohint",false);
     antialias=desktopsettings.readBoolEntry("Xft","antialias",true);
+
+    // Coyote Toolkit (CYTButton): disabled-text style
+    cytEngraveDisabled=desktopsettings.readBoolEntry("SETTINGS","cytengraveddisabled",false);
     return true;
     }
   return false;
@@ -1448,6 +1460,9 @@ FXbool FXDesktopSetup::writeSettingsFile(const FXString& file){
   desktopsettings.writeBoolEntry("Xft","hinting",hinting);
   desktopsettings.writeBoolEntry("Xft","autohint",autohint);
   desktopsettings.writeBoolEntry("Xft","antialias",antialias);
+
+  // Coyote Toolkit (CYTButton): disabled-text style
+  desktopsettings.writeBoolEntry("SETTINGS","cytengraveddisabled",cytEngraveDisabled);
 
 
   // Write file

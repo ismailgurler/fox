@@ -67,13 +67,13 @@ FXIMPLEMENT(CYTButton,FXButton,CYTButtonMap,ARRAYNUMBER(CYTButtonMap))
 // style Coyote widget simply won't inherit from CYTButton, the same way
 // Win95's toolbar buttons are a different window class entirely, not a
 // flag on the same one (see PLAN.md, chicagouireplica branch).
-// Disabled-text style (flat Win95/98 gray vs. engraved Win2000) is read
-// once here from the registry, same "takes effect next app launch"
-// convention as ControlPanel's other SETTINGS-section entries (e.g. UI
-// Scaling). See the doc comment in CYTButton.h.
+// 3D-engraved style (flat Win95/98 gray vs. engraved Win2000 disabled
+// text) is read once here from the registry, same "takes effect next
+// app launch" convention as ControlPanel's other SETTINGS-section
+// entries (e.g. UI Scaling). See the doc comment in CYTButton.h.
 CYTButton::CYTButton(FXComposite* p,const FXString& text,FXIcon* ic,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
   FXButton(p,text,ic,tgt,sel,opts|BUTTON_DEFAULT,x,y,w,h,pl,pr,pt,pb),
-  engraveDisabled(getApp()->reg().readBoolEntry("SETTINGS","cytengraveddisabled",false)){
+  engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)){
   }
 
 
@@ -174,11 +174,11 @@ long CYTButton::onPaint(FXObject*,FXSelector,void* ptr){
   if(!label.empty()){
     dc.setFont(font);
     if(!isEnabled()){
-      if(engraveDisabled){
+      if(engrave3DStyle){
         // Engraved (Windows 2000 style): hiliteColor copy offset +1,+1
         // behind a shadowColor copy on top -- Win2000 changed the standard
         // BUTTON control to match what the Toolbar common control always
-        // did (see engraveDisabled's doc comment in CYTButton.h).
+        // did (see engrave3DStyle's doc comment in CYTButton.h).
         dc.setForeground(hiliteColor);
         dc.drawText(x+1,y+1+ascent,label);
         dc.setForeground(shadowColor);

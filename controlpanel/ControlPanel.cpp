@@ -509,9 +509,9 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   new FXLabel(matrix3,tr("Xft font anti-aliasing"),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
   xftAntialiasCheck=new FXCheckButton(matrix3,FXString::null,&target_antialias,FXDataTarget::ID_VALUE);
 
-  // Coyote Toolkit (CYTButton): disabled-text style
-  new FXLabel(matrix3,tr("Engrave disabled button text\t\tWindows 2000 style (hilite+shadow); unchecked is Windows 95/98 style (flat gray). Affects Coyote Toolkit (CYTButton) widgets. Takes effect the next time an application starts."),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
-  new FXCheckButton(matrix3,FXString::null,&target_cytengravedisabled,FXDataTarget::ID_VALUE);
+  // Coyote Toolkit: 3D-engraved disabled-text style
+  new FXLabel(matrix3,tr("Use 3D engraved style for disabled text\t\tWindows 2000 style (hilite+shadow); unchecked is Windows 95/98 style (flat gray). Affects Coyote Toolkit widgets. Takes effect the next time an application starts."),nullptr,LAYOUT_RIGHT|LAYOUT_CENTER_Y);
+  new FXCheckButton(matrix3,FXString::null,&target_engrave3dstyle,FXDataTarget::ID_VALUE);
 
   // Close button etc.
   new FXSeparator(main,SEPARATOR_GROOVE|LAYOUT_FILL_X);
@@ -564,9 +564,9 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   autohint=false;
   antialias=true;
 
-  // Coyote Toolkit (CYTButton): disabled-text style; initial value mirrors
+  // Coyote Toolkit: 3D-engraved disabled-text style; initial value mirrors
   // what CYTButton itself defaults to when the registry key is unset.
-  cytEngraveDisabled=getApp()->reg().readBoolEntry("SETTINGS","cytengraveddisabled",false);
+  engrave3DStyle=getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false);
 
   filebinding.flags=0;
 
@@ -605,7 +605,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   target_hinting.connect(hinting);
   target_autohint.connect(autohint);
   target_antialias.connect(antialias);
-  target_cytengravedisabled.connect(cytEngraveDisabled);
+  target_engrave3dstyle.connect(engrave3DStyle);
 
   // File data target associations
   target_filebinding_description.connect(filebinding.description);
@@ -1380,8 +1380,8 @@ FXbool FXDesktopSetup::readSettingsFile(const FXString& file){
     autohint=desktopsettings.readBoolEntry("Xft","autohint",false);
     antialias=desktopsettings.readBoolEntry("Xft","antialias",true);
 
-    // Coyote Toolkit (CYTButton): disabled-text style
-    cytEngraveDisabled=desktopsettings.readBoolEntry("SETTINGS","cytengraveddisabled",false);
+    // Coyote Toolkit: 3D-engraved disabled-text style
+    engrave3DStyle=desktopsettings.readBoolEntry("SETTINGS","engrave3dstyle",false);
     return true;
     }
   return false;
@@ -1461,8 +1461,8 @@ FXbool FXDesktopSetup::writeSettingsFile(const FXString& file){
   desktopsettings.writeBoolEntry("Xft","autohint",autohint);
   desktopsettings.writeBoolEntry("Xft","antialias",antialias);
 
-  // Coyote Toolkit (CYTButton): disabled-text style
-  desktopsettings.writeBoolEntry("SETTINGS","cytengraveddisabled",cytEngraveDisabled);
+  // Coyote Toolkit: 3D-engraved disabled-text style
+  desktopsettings.writeBoolEntry("SETTINGS","engrave3dstyle",engrave3DStyle);
 
 
   // Write file

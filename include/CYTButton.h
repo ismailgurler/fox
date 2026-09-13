@@ -49,20 +49,20 @@ namespace FX {
 *
 * Disabled-text rendering is configurable: real Win95/98 draws it as flat
 * shadowColor text (one pass, no shadow copy), but Windows 2000 changed the
-* standard BUTTON control to draw it "engraved" (a hiliteColor copy offset
-* +1,+1 behind a shadowColor copy on top), matching what the Toolbar common
-* control always did. Since both are genuine real-Windows behaviors from
-* different eras, which one CYTButton uses is read once, at construction,
-* from the registry key SETTINGS/cytengraveddisabled (set via ControlPanel's
-* General page) -- false (Win95/98 flat gray) unless that key says
-* otherwise. See PLAN.md, chicagouireplica branch.
+* standard BUTTON control to draw it with a raised, 3D-engraved look (a
+* hiliteColor copy offset +1,+1 behind a shadowColor copy on top), matching
+* what the Toolbar common control always did. Since both are genuine
+* real-Windows behaviors from different eras, which one CYTButton uses is
+* read once, at construction, from the registry key SETTINGS/engrave3dstyle
+* (set via ControlPanel's General page) -- false (Win95/98 flat gray)
+* unless that key says otherwise. See PLAN.md, chicagouireplica branch.
 */
 class FXAPI CYTButton : public FXButton {
   FXDECLARE(CYTButton)
 protected:
-  FXbool engraveDisabled;
+  FXbool engrave3DStyle;
 protected:
-  CYTButton():engraveDisabled(false){}
+  CYTButton():engrave3DStyle(false){}
 private:
   CYTButton(const CYTButton&);
   CYTButton &operator=(const CYTButton&);

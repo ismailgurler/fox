@@ -17,6 +17,13 @@
 
 namespace FX {
 
+/// Coyote Toolkit border styles (see CYTButton)
+enum {
+  CYT_STYLE_95   = 0,           /// Windows 95: plain bevel
+  CYT_STYLE_98   = 1,           /// Windows 98: + inner COLOR_3DLIGHT top/left ring
+  CYT_STYLE_2000 = 2            /// Windows 2000: outer bottom/right edge is COLOR_3DDKSHADOW
+  };
+
 
 /**
 * CYTButton is a pixel-accurate replica of the classic Windows 95/98 push
@@ -56,13 +63,24 @@ namespace FX {
 * read once, at construction, from the registry key SETTINGS/engrave3dstyle
 * (set via ControlPanel's General page) -- false (Win95/98 flat gray)
 * unless that key says otherwise. See PLAN.md, chicagouireplica branch.
+*
+* Border style is likewise selectable (CYT_STYLE_95/98/2000, read once at
+* construction from SETTINGS/themestyle, set via ControlPanel's "Theme
+* style" dropdown), each a small delta on the Win95 bevel: 98 adds an inner
+* top/left ring in COLOR_3DLIGHT, 2000 darkens the bevel's outer bottom/right
+* edge to COLOR_3DDKSHADOW. Both colors are computed from the widget's own
+* theme colors, not hardcoded:
+*   3DLIGHT    = (backColor   + hiliteColor) / 2   per channel, rounded down
+*   3DDKSHADOW = (borderColor + shadowColor) / 2   per channel, rounded down
+* (giving #DFDFDF / #404040 for the stock Win95 palette).
 */
 class FXAPI CYTButton : public FXButton {
   FXDECLARE(CYTButton)
 protected:
   FXbool engrave3DStyle;
+  FXint  themeStyle;
 protected:
-  CYTButton():engrave3DStyle(false){}
+  CYTButton():engrave3DStyle(false),themeStyle(CYT_STYLE_95){}
 private:
   CYTButton(const CYTButton&);
   CYTButton &operator=(const CYTButton&);

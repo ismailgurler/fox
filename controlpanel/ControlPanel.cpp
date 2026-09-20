@@ -298,6 +298,14 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   FXTextField* bitmapfontdirs=new FXTextField(hframe2b,2,&target_bitmapfontpath,FXDataTarget::ID_VALUE,LAYOUT_SIDE_LEFT|LAYOUT_FILL_X|LAYOUT_CENTER_Y|FRAME_SUNKEN|FRAME_THICK);
   bitmapfontdirs->setTipText(tr("List of directories to search for Windows .FON bitmap font files."));
 
+  // Coyote Toolkit theme style: which era's 3D bevel the Coyote widgets draw
+  FXHorizontalFrame* hframe2c=new FXHorizontalFrame(vframe4,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING,DEFAULT_SPACING);
+  new FXLabel(hframe2c,tr("Theme style:"),nullptr,LAYOUT_CENTER_Y);
+  FXListBox* themestylelist=new FXListBox(hframe2c,&target_themestyle,FXDataTarget::ID_VALUE,FRAME_SUNKEN|FRAME_THICK|LAYOUT_CENTER_Y);
+  themestylelist->fillItems(tr("95\n98\n2000"));
+  themestylelist->setNumVisible(3);
+  themestylelist->setTipText(tr("Border style of Coyote Toolkit widgets: Windows 95 (flat bevel), 98 (extra inner highlight) or 2000 (darker outer edge). Takes effect the next time an application starts."));
+
   /// File Binding Panel ///
   FXVerticalFrame* vframe5=new FXVerticalFrame(switcher,LAYOUT_FILL_X|LAYOUT_FILL_Y,0,0,0,0,0,0,0,0,0,0);
 
@@ -567,6 +575,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   // Coyote Toolkit: 3D-engraved disabled-text style; initial value mirrors
   // what CYTButton itself defaults to when the registry key is unset.
   engrave3DStyle=getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false);
+  themeStyle=FXCLAMP(0,getApp()->reg().readIntEntry("SETTINGS","themestyle",0),2);
 
   filebinding.flags=0;
 
@@ -606,6 +615,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   target_autohint.connect(autohint);
   target_antialias.connect(antialias);
   target_engrave3dstyle.connect(engrave3DStyle);
+  target_themestyle.connect(themeStyle);
 
   // File data target associations
   target_filebinding_description.connect(filebinding.description);
@@ -1382,6 +1392,7 @@ FXbool FXDesktopSetup::readSettingsFile(const FXString& file){
 
     // Coyote Toolkit: 3D-engraved disabled-text style
     engrave3DStyle=desktopsettings.readBoolEntry("SETTINGS","engrave3dstyle",false);
+    themeStyle=FXCLAMP(0,desktopsettings.readIntEntry("SETTINGS","themestyle",0),2);
     return true;
     }
   return false;
@@ -1463,6 +1474,7 @@ FXbool FXDesktopSetup::writeSettingsFile(const FXString& file){
 
   // Coyote Toolkit: 3D-engraved disabled-text style
   desktopsettings.writeBoolEntry("SETTINGS","engrave3dstyle",engrave3DStyle);
+  desktopsettings.writeIntEntry("SETTINGS","themestyle",themeStyle);
 
 
   // Write file

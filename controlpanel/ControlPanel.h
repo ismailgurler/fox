@@ -146,6 +146,7 @@ private:
   FXbool             hinting;
   FXbool             autohint;
   FXbool             antialias;
+  FXint              themeStyle;        // Coyote Toolkit bevel style: 0=Win95, 1=Win98, 2=Win2000
   FXbool             engrave3DStyle;    // Coyote Toolkit: 3D-engraved (Win2000) vs flat gray (Win95/98) disabled text
   FXFileBinding      filebinding;       // Current file binding
 private:
@@ -181,6 +182,7 @@ private:
   FXDataTarget       target_hinting;            // Xft font hinting
   FXDataTarget       target_autohint;           // Xft autohint
   FXDataTarget       target_antialias;          // Xft anti-aliasing
+  FXDataTarget       target_themestyle;         // Coyote Toolkit bevel style
   FXDataTarget       target_engrave3dstyle;     // Coyote Toolkit: 3D-engraved vs flat gray disabled text
   FXDataTarget       target_filebinding_description;
   FXDataTarget       target_filebinding_command;

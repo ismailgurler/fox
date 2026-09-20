@@ -73,7 +73,8 @@ FXIMPLEMENT(CYTButton,FXButton,CYTButtonMap,ARRAYNUMBER(CYTButtonMap))
 // entries (e.g. UI Scaling). See the doc comment in CYTButton.h.
 CYTButton::CYTButton(FXComposite* p,const FXString& text,FXIcon* ic,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
   FXButton(p,text,ic,tgt,sel,opts|BUTTON_DEFAULT,x,y,w,h,pl,pr,pt,pb),
-  engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)){
+  engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)),
+  themeStyle(FXCLAMP(CYT_STYLE_95,getApp()->reg().readIntEntry("SETTINGS","themestyle",CYT_STYLE_95),CYT_STYLE_2000)){
   }
 
 
@@ -96,6 +97,26 @@ static void cytDrawRaisedBevel(FXDCWindow& dc,FXColor face,FXColor hilite,FXColo
   dc.setForeground(shadow);
   dc.fillRectangle(x+1,y+h-2,w-2,1);    // inner bottom edge, x=1..W-2
   dc.fillRectangle(x+w-2,y+1,1,h-2);    // inner right edge,  y=1..H-2
+  }
+
+
+// Per-channel average, rounded down -- how Windows derives COLOR_3DLIGHT
+// (face+highlight) and COLOR_3DDKSHADOW (windowframe+shadow) (spec section 6)
+static FXColor cytAverage(FXColor a,FXColor b){
+  return FXRGB((FXREDVAL(a)+FXREDVAL(b))/2,(FXGREENVAL(a)+FXGREENVAL(b))/2,(FXBLUEVAL(a)+FXBLUEVAL(b))/2);
+  }
+
+
+// Windows 98's extra inner highlight ring (spec section 6): one more line
+// just inside the bevel's top/left edge, stopping short of the shadow
+// columns. inset is 1 for a plain bevel, 2 for a Default button's (whose
+// bevel is itself inset 1px inside the black ring).
+static void cytDrawInnerHighlight(FXDCWindow& dc,FXColor light,FXint inset,FXint w,FXint h){
+  FXint len_x=w-2*inset-1,len_y=h-2*inset-1;
+  if(len_x<=0 || len_y<=0) return;
+  dc.setForeground(light);
+  dc.fillRectangle(inset,inset,len_x,1);   // top,  x=inset..W-inset-2
+  dc.fillRectangle(inset,inset,1,len_y);   // left, y=inset..H-inset-2
   }
 
 
@@ -157,6 +178,12 @@ long CYTButton::onPaint(FXObject*,FXSelector,void* ptr){
   FXbool deflt=isDefault() && isEnabled() && !pressed;
   FXbool focused=hasFocus();
 
+  // Spec section 6: Win2000 darkens the bevel's own outer bottom/right edge
+  // (never the pressed frame, nor Default's added black ring); Win98 adds
+  // an inner top/left highlight ring. Both colors are computed from theme.
+  FXColor outerEdge=(themeStyle==CYT_STYLE_2000) ? cytAverage(borderColor,shadowColor) : borderColor;
+  FXColor light3D=cytAverage(backColor,hiliteColor);
+
   // Spec section 5: border/bevel, per state
   if(pressed){
     cytDrawPressedBevel(dc,backColor,shadowColor,borderColor,0,0,width,height);
@@ -164,10 +191,12 @@ long CYTButton::onPaint(FXObject*,FXSelector,void* ptr){
   else if(deflt){
     dc.setForeground(borderColor);
     dc.fillRectangle(0,0,width,height);
-    cytDrawRaisedBevel(dc,backColor,hiliteColor,shadowColor,borderColor,1,1,width-2,height-2);
+    cytDrawRaisedBevel(dc,backColor,hiliteColor,shadowColor,outerEdge,1,1,width-2,height-2);
+    if(themeStyle==CYT_STYLE_98) cytDrawInnerHighlight(dc,light3D,2,width,height);
     }
   else{
-    cytDrawRaisedBevel(dc,backColor,hiliteColor,shadowColor,borderColor,0,0,width,height);
+    cytDrawRaisedBevel(dc,backColor,hiliteColor,shadowColor,outerEdge,0,0,width,height);
+    if(themeStyle==CYT_STYLE_98) cytDrawInnerHighlight(dc,light3D,1,width,height);
     }
 
   // Spec section 5: label text, per state

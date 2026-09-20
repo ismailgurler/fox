@@ -83,11 +83,12 @@ const ColorTheme ColorThemes[]={
   {"Pale Gray"         ,FXRGB(214,214,214),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,  0),FXRGB(255,255,255)},
   {"Plastik"           ,FXRGB(239,239,239),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(103,141,178),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(103,141,178),FXRGB(255,255,255)},
   {"Pumpkin"           ,FXRGB(238,216,174),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(205,133, 63),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(205,133, 63),FXRGB(255,255,255)},
-  {"Redmond 95"        ,FXRGB(195,195,195),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,255),FXRGB(128,128,128),true,true},
+  {"Redmond 95"        ,FXRGB(192,192,192),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,255),FXRGB(128,128,128),true,true,CYT_STYLE_95},
+  {"Redmond 98"        ,FXRGB(192,192,192),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,255),FXRGB(128,128,128),true,true,CYT_STYLE_98},
 //|--------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------|
 //|        Name        |        Base      |       Border     |       Back       |      Fore        |      Selback     |      Selfore     |      Tipback     |     Tipfore      |      Menuback    |      Menufore    |
 //|--------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------+------------------|
-  {"Redmond 2000"      ,FXRGB(212,208,200),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0, 36,104),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0, 36,104),FXRGB(255,255,255)},
+  {"Redmond 2000"      ,FXRGB(212,208,200),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(  0,  0,128),FXRGB(255,255,255),FXRGB(255,255,255),FXRGB(128,128,128),true,true,CYT_STYLE_2000},
   {"Redmond XP"        ,FXRGB(238,238,230),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB( 74,121,205),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB( 74,121,205),FXRGB(255,255,255)},
   {"Solaris"           ,FXRGB(174,178,195),FXRGB(  0,  0,  0),FXRGB(147,151,165),FXRGB(  0,  0,  0),FXRGB(113,139,165),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(113,139,165),FXRGB(255,255,255)},
   {"Storm"             ,FXRGB(192,192,192),FXRGB(  0,  0,  0),FXRGB(255,255,255),FXRGB(  0,  0,  0),FXRGB(139,  0,139),FXRGB(255,255,255),FXRGB(255,255,225),FXRGB(  0,  0,  0),FXRGB(139,  0,139),FXRGB(255,255,255)},
@@ -973,6 +974,10 @@ long FXDesktopSetup::onColorTheme(FXObject*,FXSelector,void* ptr){
     theme_current.hilite = theme_selected->hasHilite ? theme_selected->hilite : makeHiliteColor(theme_selected->base);
     theme_current.shadow = theme_selected->hasShadow ? theme_selected->shadow : makeShadowColor(theme_selected->base);
 
+    // Coyote Toolkit bevel style travels with the theme (the Theme style
+    // dropdown, bound to themeStyle, follows and can still be changed after)
+    themeStyle = theme_selected->style;
+
     setupColors();
     }
   return 1;
@@ -1062,7 +1067,8 @@ void FXDesktopSetup::initColors(){
        (theme_current.menufore==ColorThemes[i].menufore) &&
        (theme_current.menuback==ColorThemes[i].menuback) &&
        (theme_current.tipfore==ColorThemes[i].tipfore) &&
-       (theme_current.tipback==ColorThemes[i].tipback)){
+       (theme_current.tipback==ColorThemes[i].tipback) &&
+       (themeStyle==ColorThemes[i].style)){
       scheme=i;
       break;
       }
@@ -1092,6 +1098,7 @@ void FXDesktopSetup::initColors(){
     theme_user.shadow=theme_current.shadow;
     theme_user.hasHilite=true;
     theme_user.hasShadow=true;
+    theme_user.style=themeStyle;
     scheme=list->getNumItems();
     list->appendItem(tr("Current"),nullptr,&theme_user);
     }

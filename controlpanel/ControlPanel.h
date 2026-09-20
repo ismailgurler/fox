@@ -42,6 +42,8 @@ struct ColorTheme {
                               // makeHiliteColor(base)/makeShadowColor(base), same as every
                               // theme did before these two fields existed -- see PLAN.md,
                               // chicagouireplica branch.
+  FXint         style;        // Coyote Toolkit bevel style (CYT_STYLE_95/98/2000); trailing, so
+                              // rows that omit it are 0 == 95 -- the default for every theme.
   };
 
 

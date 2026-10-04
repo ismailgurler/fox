@@ -65,6 +65,29 @@ CYTGroupBox::CYTGroupBox(FXComposite* p,const FXString& text,FXuint opts,FXint x
 
 /*******************************************************************************/
 
+// Return default height -- same formula as FXGroupBox::getDefaultHeight(),
+// but applied unconditionally (not just "if(!label.empty())"): spec
+// section 4's frame-top shift happens even with no label, so the space for
+// it must always be reserved, or an unlabeled box's children overlap the
+// frame's top ring.
+FXint CYTGroupBox::getDefaultHeight(){
+  FXint ch=FXPacker::getDefaultHeight();
+  return ch+font->getFontHeight()+4-border;
+  }
+
+
+// Recompute layout -- same unconditional reservation as getDefaultHeight()
+void CYTGroupBox::layout(){
+  FXint tmp=padtop;
+  padtop=padtop+font->getFontHeight()+4-border;
+  FXPacker::layout();
+  flags&=~FLAG_DIRTY;
+  padtop=tmp;
+  }
+
+
+/*******************************************************************************/
+
 // Draw the etched frame (spec section 5): two concentric 1px rings, always
 // 1px apart -- outer SHADOW on top/left, HIGHLIGHT on bottom/right; inner
 // the reverse. top is the frame's top edge (FRAME_TOP, spec section 4);

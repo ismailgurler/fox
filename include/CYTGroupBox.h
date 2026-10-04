@@ -24,15 +24,18 @@ namespace FX {
 * by the uxtheme.dll overhaul in XP).
 *
 * Behaviorally a drop-in replacement for FXGroupBox -- same constructor
-* signature, same GROUPBOX_TITLE_LEFT/CENTER/RIGHT alignment options, same
-* child-layout behavior (inherited unchanged) -- it only replaces onPaint()
-* with the exact etched-frame geometry and label placement from the group
-* box spec. Unlike a button, the frame is *etched* (two concentric
-* highlight/shadow rings, never SHADOW_DARK) rather than raised, and the
-* label is top-aligned (y=0), never vertically centered -- the frame's top
-* ring is pushed down by font.lineHeight/2 to make room for it, with a gap
-* cut into both top-ring rows under the label's run (or drawn unbroken when
-* there's no label).
+* signature, same GROUPBOX_TITLE_LEFT/CENTER/RIGHT alignment options -- but
+* it also overrides layout()/getDefaultHeight(), not just onPaint(). Unlike
+* a button, the frame is *etched* (two concentric highlight/shadow rings,
+* never SHADOW_DARK) rather than raised, and the label is top-aligned
+* (y=0), never vertically centered -- the frame's top ring is pushed down
+* by font.lineHeight/2 to make room for it (spec section 4), with a gap cut
+* into both top-ring rows under the label's run (or drawn unbroken when
+* there's no label). That shift is *unconditional* -- it applies even with
+* no label at all -- but FXGroupBox's own layout()/getDefaultHeight() only
+* reserve the extra top space when a label is present, which would let an
+* unlabeled CYTGroupBox's children overlap the frame's top ring. Both are
+* overridden here to reserve that space unconditionally instead.
 *
 * Uses the widget's own theme colors (hiliteColor, shadowColor, backColor,
 * textColor) rather than hardcoded values, so it follows whatever color
@@ -59,6 +62,13 @@ private:
   CYTGroupBox &operator=(const CYTGroupBox&);
 public:
   long onPaint(FXObject*,FXSelector,void*);
+public:
+
+  /// Perform layout -- unconditional top-padding reservation; see class doc comment
+  virtual void layout();
+
+  /// Return default height -- unconditional top-padding reservation; see class doc comment
+  virtual FXint getDefaultHeight();
 public:
 
   /// Construct group box; same signature as FXGroupBox

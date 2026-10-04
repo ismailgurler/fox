@@ -18,6 +18,7 @@ set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "Specify the name of the directory w
 
 set(HEADERS
   ../include/CYTCommandButton.h
+  ../include/CYTGroupBox.h
   ../include/fx3d.h
   ../include/FX4Splitter.h
   ../include/FX7Segment.h
@@ -382,6 +383,7 @@ set(HEADERS
 
 set(SOURCES
   CYTCommandButton.cpp
+  CYTGroupBox.cpp
   FX4Splitter.cpp
   FX7Segment.cpp
   FX885910Codec.cpp

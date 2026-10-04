@@ -1,6 +1,6 @@
 /********************************************************************************
 *                                                                               *
-*                 C Y T B u t t o n   -   W i n 9 5   P u s h   B u t t o n     *
+*                 C Y T C o m m a n d B u t t o n   -   W i n 9 5   P u s h   B u t t o n     *
 *                                                                               *
 *********************************************************************************
 * Part of the "Coyote Toolkit" (CYT) widget family -- pixel-accurate replicas  *
@@ -8,8 +8,8 @@
 * See PLAN.md on the chicagouireplica branch for the full rendering spec this  *
 * class implements.                                                            *
 ********************************************************************************/
-#ifndef CYTBUTTON_H
-#define CYTBUTTON_H
+#ifndef CYTCOMMANDBUTTON_H
+#define CYTCOMMANDBUTTON_H
 
 #ifndef FXBUTTON_H
 #include "FXButton.h"
@@ -17,7 +17,7 @@
 
 namespace FX {
 
-/// Coyote Toolkit border styles (see CYTButton)
+/// Coyote Toolkit border styles (see CYTCommandButton)
 enum {
   CYT_STYLE_95   = 0,           /// Windows 95: plain bevel
   CYT_STYLE_98   = 1,           /// Windows 98: + inner COLOR_3DLIGHT top/left ring
@@ -26,7 +26,7 @@ enum {
 
 
 /**
-* CYTButton is a pixel-accurate replica of the classic Windows 95/98 push
+* CYTCommandButton is a pixel-accurate replica of the classic Windows 95/98 push
 * button (USER32.DLL-era GDI control painting, identical on Win95/98/NT4,
 * superseded by the uxtheme.dll overhaul in XP).
 *
@@ -43,7 +43,7 @@ enum {
 * Win95 dialog, the roaming "default button" black outline is automatic
 * for every ordinary push button -- not an opt-in setting -- and only
 * excludes controls that are a different window class entirely (like
-* toolbar buttons). Since CYTButton represents that one specific real
+* toolbar buttons). Since CYTCommandButton represents that one specific real
 * control, not a general-purpose button that might also be toolbar-
 * style, it always participates the same way. BUTTON_INITIAL (which
 * marks the one button that starts as default) is unaffected -- still an
@@ -59,7 +59,7 @@ enum {
 * standard BUTTON control to draw it with a raised, 3D-engraved look (a
 * hiliteColor copy offset +1,+1 behind a shadowColor copy on top), matching
 * what the Toolbar common control always did. Since both are genuine
-* real-Windows behaviors from different eras, which one CYTButton uses is
+* real-Windows behaviors from different eras, which one CYTCommandButton uses is
 * read once, at construction, from the registry key SETTINGS/engrave3dstyle
 * (set via ControlPanel's General page) -- false (Win95/98 flat gray)
 * unless that key says otherwise. See PLAN.md, chicagouireplica branch.
@@ -74,22 +74,22 @@ enum {
 *   3DDKSHADOW = (borderColor + shadowColor) / 2   per channel, rounded down
 * (giving #DFDFDF / #404040 for the stock Win95 palette).
 */
-class FXAPI CYTButton : public FXButton {
-  FXDECLARE(CYTButton)
+class FXAPI CYTCommandButton : public FXButton {
+  FXDECLARE(CYTCommandButton)
 protected:
   FXbool engrave3DStyle;
   FXint  themeStyle;
 protected:
-  CYTButton():engrave3DStyle(false),themeStyle(CYT_STYLE_95){}
+  CYTCommandButton():engrave3DStyle(false),themeStyle(CYT_STYLE_95){}
 private:
-  CYTButton(const CYTButton&);
-  CYTButton &operator=(const CYTButton&);
+  CYTCommandButton(const CYTCommandButton&);
+  CYTCommandButton &operator=(const CYTCommandButton&);
 public:
   long onPaint(FXObject*,FXSelector,void*);
 public:
 
   /// Construct button with text and icon; same signature as FXButton
-  CYTButton(FXComposite* p,const FXString& text,FXIcon* ic=nullptr,FXObject* tgt=nullptr,FXSelector sel=0,FXuint opts=BUTTON_NORMAL,FXint x=0,FXint y=0,FXint w=0,FXint h=0,FXint pl=DEFAULT_PAD,FXint pr=DEFAULT_PAD,FXint pt=DEFAULT_PAD,FXint pb=DEFAULT_PAD);
+  CYTCommandButton(FXComposite* p,const FXString& text,FXIcon* ic=nullptr,FXObject* tgt=nullptr,FXSelector sel=0,FXuint opts=BUTTON_NORMAL,FXint x=0,FXint y=0,FXint w=0,FXint h=0,FXint pl=DEFAULT_PAD,FXint pr=DEFAULT_PAD,FXint pt=DEFAULT_PAD,FXint pb=DEFAULT_PAD);
   };
 
 }

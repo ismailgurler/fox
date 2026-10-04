@@ -1,6 +1,6 @@
 /********************************************************************************
 *                                                                               *
-*                 C Y T B u t t o n   -   W i n 9 5   P u s h   B u t t o n     *
+*                 C Y T C o m m a n d B u t t o n   -   W i n 9 5   P u s h   B u t t o n     *
 *                                                                               *
 *********************************************************************************
 * Pixel-accurate replica of the classic (pre-uxtheme) Windows 95/98 push       *
@@ -34,7 +34,7 @@
 #include "FXIcon.h"
 #include "FXShell.h"
 #include "FXButton.h"
-#include "CYTButton.h"
+#include "CYTCommandButton.h"
 
 using namespace FX;
 
@@ -42,13 +42,13 @@ namespace FX {
 
 // Map -- only onPaint is overridden; every other FXButton behavior (press/
 // release, default/focus state machine, message IDs) is inherited unchanged.
-FXDEFMAP(CYTButton) CYTButtonMap[]={
-  FXMAPFUNC(SEL_PAINT,0,CYTButton::onPaint),
+FXDEFMAP(CYTCommandButton) CYTCommandButtonMap[]={
+  FXMAPFUNC(SEL_PAINT,0,CYTCommandButton::onPaint),
   };
 
 
 // Object implementation
-FXIMPLEMENT(CYTButton,FXButton,CYTButtonMap,ARRAYNUMBER(CYTButtonMap))
+FXIMPLEMENT(CYTCommandButton,FXButton,CYTCommandButtonMap,ARRAYNUMBER(CYTCommandButtonMap))
 
 
 // Construct button with text and icon; same signature as FXButton.
@@ -61,17 +61,17 @@ FXIMPLEMENT(CYTButton,FXButton,CYTButtonMap,ARRAYNUMBER(CYTButtonMap))
 // the dialog manager regardless of what the app author does. FXButton
 // needs BUTTON_DEFAULT as an explicit flag because one FXButton class
 // also serves toolbar-style buttons (BUTTON_TOOLBAR) that must never
-// participate. CYTButton has no such dual role -- it represents exactly
+// participate. CYTCommandButton has no such dual role -- it represents exactly
 // one real control, the classic push button -- so it always
 // participates, the same way a real one always would. A future toolbar-
-// style Coyote widget simply won't inherit from CYTButton, the same way
+// style Coyote widget simply won't inherit from CYTCommandButton, the same way
 // Win95's toolbar buttons are a different window class entirely, not a
 // flag on the same one (see PLAN.md, chicagouireplica branch).
 // 3D-engraved style (flat Win95/98 gray vs. engraved Win2000 disabled
 // text) is read once here from the registry, same "takes effect next
 // app launch" convention as ControlPanel's other SETTINGS-section
-// entries (e.g. UI Scaling). See the doc comment in CYTButton.h.
-CYTButton::CYTButton(FXComposite* p,const FXString& text,FXIcon* ic,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
+// entries (e.g. UI Scaling). See the doc comment in CYTCommandButton.h.
+CYTCommandButton::CYTCommandButton(FXComposite* p,const FXString& text,FXIcon* ic,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
   FXButton(p,text,ic,tgt,sel,opts|BUTTON_DEFAULT,x,y,w,h,pl,pr,pt,pb),
   engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)),
   themeStyle(FXCLAMP(CYT_STYLE_95,getApp()->reg().readIntEntry("SETTINGS","themestyle",CYT_STYLE_95),CYT_STYLE_2000)){
@@ -160,7 +160,7 @@ static void cytDrawFocusRect(FXDCWindow& dc,FXColor shadowDark,FXint w,FXint h){
 /*******************************************************************************/
 
 // Handle repaint
-long CYTButton::onPaint(FXObject*,FXSelector,void* ptr){
+long CYTCommandButton::onPaint(FXObject*,FXSelector,void* ptr){
   FXEvent *ev=(FXEvent*)ptr;
   FXDCWindow dc(this,ev);
 
@@ -207,7 +207,7 @@ long CYTButton::onPaint(FXObject*,FXSelector,void* ptr){
         // Engraved (Windows 2000 style): hiliteColor copy offset +1,+1
         // behind a shadowColor copy on top -- Win2000 changed the standard
         // BUTTON control to match what the Toolbar common control always
-        // did (see engrave3DStyle's doc comment in CYTButton.h).
+        // did (see engrave3DStyle's doc comment in CYTCommandButton.h).
         dc.setForeground(hiliteColor);
         dc.drawText(x+1,y+1+ascent,label);
         dc.setForeground(shadowColor);

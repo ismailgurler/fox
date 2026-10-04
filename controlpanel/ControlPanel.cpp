@@ -574,7 +574,7 @@ FXDesktopSetup::FXDesktopSetup(FXApp *ap):FXMainWindow(ap,FXString::null,nullptr
   antialias=true;
 
   // Coyote Toolkit: 3D-engraved disabled-text style; initial value mirrors
-  // what CYTButton itself defaults to when the registry key is unset.
+  // what CYTCommandButton itself defaults to when the registry key is unset.
   engrave3DStyle=getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false);
   themeStyle=FXCLAMP(0,getApp()->reg().readIntEntry("SETTINGS","themestyle",0),2);
 

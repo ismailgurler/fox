@@ -17,8 +17,10 @@ option(WITH_OPENGL "Compile with OpenGL support" ON)
 set(CMAKE_INSTALL_LIBDIR "lib" CACHE STRING "Specify the name of the directory where libraries are meant to be installed")
 
 set(HEADERS
+  ../include/CYTCheckBox.h
   ../include/CYTCommandButton.h
   ../include/CYTGroupBox.h
+  ../include/CYTRadioButton.h
   ../include/fx3d.h
   ../include/FX4Splitter.h
   ../include/FX7Segment.h
@@ -382,8 +384,10 @@ set(HEADERS
   ../include/xincs.h)
 
 set(SOURCES
+  CYTCheckBox.cpp
   CYTCommandButton.cpp
   CYTGroupBox.cpp
+  CYTRadioButton.cpp
   FX4Splitter.cpp
   FX7Segment.cpp
   FX885910Codec.cpp

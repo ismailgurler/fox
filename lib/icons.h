@@ -30,13 +30,13 @@ extern const unsigned char bignetdrive[];
 
 extern const unsigned char bignethood[];
 
-extern const unsigned char bookmrk_gif[];
-
 extern const unsigned char bookclr_gif[];
 
-extern const unsigned char bookset_gif[];
-
 extern const unsigned char bookdel_gif[];
+
+extern const unsigned char bookmrk_gif[];
+
+extern const unsigned char bookset_gif[];
 
 extern const unsigned char clearentry[];
 
@@ -132,6 +132,8 @@ extern const unsigned char portrait[];
 
 extern const unsigned char questionicon[];
 
+extern const unsigned char redo_gif[];
+
 extern const unsigned char rgbmode[];
 
 extern const unsigned char searchicon[];
@@ -143,8 +145,6 @@ extern const unsigned char showdetails[];
 extern const unsigned char showsmallicons[];
 
 extern const unsigned char sorting[];
-
-extern const unsigned char redo_gif[];
 
 extern const unsigned char undo_gif[];
 

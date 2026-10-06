@@ -232,6 +232,8 @@
 #include "FXCanvas.h"
 #include "FXGroupBox.h"
 #include "CYTGroupBox.h"
+#include "CYTRadioButton.h"
+#include "CYTCheckBox.h"
 #include "FXShell.h"
 #include "FXToolTip.h"
 #include "FXPopup.h"

@@ -9,7 +9,35 @@
 // Zero padding and a fixed height, so the control rectangle is exactly the
 // Windows one: height 16 puts the text one row above the box (the Win98
 // captures), 17 puts it level with the box (the Win95 disabled capture)
-#define CHECK_OPTS (CHECKBUTTON_NORMAL|JUSTIFY_LEFT|LAYOUT_FIX_HEIGHT)
+#define CHECK_OPTS (CHECKBUTTON_NORMAL|JUSTIFY_LEFT|LAYOUT_FIX_WIDTH|LAYOUT_FIX_HEIGHT)
+
+// Wider than the label needs, so the empty strip right of the text can be
+// clicked: the whole control rectangle is the hit area
+#define CHECK_W 160
+
+
+// Disabled-label override: CYT widgets take an explicit setting; stock FOX
+// widgets have none, so their rows show FOX's own disabled look
+static void engraveStyle(FXWindow*,FXuchar){}
+static void engraveStyle(CYTGroupBox* w,FXuchar s){ w->setEngrave3DStyle(s); }
+static void engraveStyle(CYTCheckBox* w,FXuchar s){ w->setEngrave3DStyle(s); }
+
+
+// A disabled group with the measured Win95 capture's labels; style applies
+// to the box title and both check boxes (maybe = follow the theme)
+template<class GROUPBOX,class CHECK>
+static void disabledPair(FXComposite* column,const FXString& title,FXuchar style){
+  GROUPBOX *g=new GROUPBOX(column,title,GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
+  g->disable();
+  engraveStyle(g,style);
+  CHECK *c=new CHECK(g,"Disconnect",nullptr,0,CHECK_OPTS,0,0,CHECK_W,17,0,0,0,0);
+  c->disable();
+  engraveStyle(c,style);
+  c=new CHECK(g,"Int 13 unit",nullptr,0,CHECK_OPTS,0,0,CHECK_W,17,0,0,0,0);
+  c->setCheck(true);
+  c->disable();
+  engraveStyle(c,style);
+  }
 
 
 // The same set of check boxes, built by either class pair
@@ -21,22 +49,19 @@ static void populate(FXComposite* column){
   for(FXint h=0; h<2; h++){
     GROUPBOX *g=new GROUPBOX(column,heights[h]==16?"Height 16":"Height 17",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
     for(FXint i=0; i<3; i++){
-      c=new CHECK(g,labels[i],nullptr,0,CHECK_OPTS,0,0,0,heights[h],0,0,0,0);
+      c=new CHECK(g,labels[i],nullptr,0,CHECK_OPTS,0,0,CHECK_W,heights[h],0,0,0,0);
       c->setCheck(i!=1);
       }
     }
 
-  // Disabled, with the measured Win95 capture's labels
-  GROUPBOX *g=new GROUPBOX(column,"Disabled",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
-  c=new CHECK(g,"Disconnect",nullptr,0,CHECK_OPTS,0,0,0,17,0,0,0,0);
-  c->disable();
-  c=new CHECK(g,"Int 13 unit",nullptr,0,CHECK_OPTS,0,0,0,17,0,0,0,0);
-  c->setCheck(true);
-  c->disable();
+  // Disabled: following the theme, then forced engraved and forced flat
+  disabledPair<GROUPBOX,CHECK>(column,"Disabled (theme)",maybe);
+  disabledPair<GROUPBOX,CHECK>(column,"Disabled, engraved",true);
+  disabledPair<GROUPBOX,CHECK>(column,"Disabled, flat",false);
 
   // Third state (MAYBE), unmeasured
-  g=new GROUPBOX(column,"Third state",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
-  c=new CHECK(g,"&Indeterminate",nullptr,0,CHECK_OPTS,0,0,0,16,0,0,0,0);
+  GROUPBOX *g=new GROUPBOX(column,"Third state",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
+  c=new CHECK(g,"&Indeterminate",nullptr,0,CHECK_OPTS,0,0,CHECK_W,16,0,0,0,0);
   c->setCheck(maybe);
   fxmessage("%s column: %s + %s\n",CHECK::metaClass.getClassName(),g->getClassName(),c->getClassName());
   }

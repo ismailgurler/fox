@@ -12,7 +12,15 @@
 #define BTN_H     23
 
 
-// Fill one column with the same set of buttons, built by either class
+// Disabled-label override: CYT widgets take an explicit setting; stock FOX
+// widgets have none, so their rows show FOX's own disabled look
+static void engraveStyle(FXWindow*,FXuchar){}
+static void engraveStyle(CYTCommandButton* w,FXuchar s){ w->setEngrave3DStyle(s); }
+
+
+// Fill one column with the same set of buttons, built by either class.
+// "Disabled" follows the theme (SETTINGS/engrave3dstyle); "Engraved" and
+// "Flat" force the disabled-label style either way.
 template<class BUTTON>
 static void populate(FXComposite* column){
   BUTTON *b;
@@ -22,6 +30,12 @@ static void populate(FXComposite* column){
   b->setState(STATE_DOWN);
   b=new BUTTON(column,"Disabled",nullptr,nullptr,0,BTN_OPTS,0,0,BTN_W,BTN_H);
   b->disable();
+  b=new BUTTON(column,"Engraved",nullptr,nullptr,0,BTN_OPTS,0,0,BTN_W,BTN_H);
+  b->disable();
+  engraveStyle(b,true);
+  b=new BUTTON(column,"Flat",nullptr,nullptr,0,BTN_OPTS,0,0,BTN_W,BTN_H);
+  b->disable();
+  engraveStyle(b,false);
   FXHorizontalFrame *row=new FXHorizontalFrame(column,LAYOUT_FILL_X,0,0,0,0,0,0,0,0,6,0);
   new BUTTON(row,"OK",nullptr,nullptr,0,BTN_OPTS|BUTTON_DEFAULT,0,0,BTN_W,BTN_H);
   b=new BUTTON(row,"Cancel",nullptr,nullptr,0,BTN_OPTS|BUTTON_DEFAULT,0,0,BTN_W,BTN_H);

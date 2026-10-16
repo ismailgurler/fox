@@ -69,14 +69,19 @@ namespace FX {
 * Border style (SETTINGS/themestyle) and disabled-text style (SETTINGS/
 * engrave3dstyle; flat gray is the measured Win95 look) are read once at
 * construction, the same keys and convention as CYTCommandButton.
+* setEngrave3DStyle(true/false) overrides the disabled-text style for one
+* check box; maybe (the default) follows the key.
 */
 class FXAPI CYTCheckBox : public FXCheckButton {
   FXDECLARE(CYTCheckBox)
 protected:
-  FXbool engrave3DStyle;
+  FXbool engrave3DStyle;        // Theme's SETTINGS/engrave3dstyle, read at construction
+  FXuchar engraveMode;          // Explicit override: true, false, or maybe (follow theme)
   FXint  themeStyle;
 protected:
-  CYTCheckBox():engrave3DStyle(false),themeStyle(CYT_STYLE_95){}
+  FXbool engravedLabel() const { return engraveMode==maybe ? engrave3DStyle : engraveMode!=false; }
+protected:
+  CYTCheckBox():engrave3DStyle(false),engraveMode(maybe),themeStyle(CYT_STYLE_95){}
 private:
   CYTCheckBox(const CYTCheckBox&);
   CYTCheckBox &operator=(const CYTCheckBox&);
@@ -87,6 +92,15 @@ public:
 
   /// Construct check box; same signature as FXCheckButton
   CYTCheckBox(FXComposite* p,const FXString& text,FXObject* tgt=nullptr,FXSelector sel=0,FXuint opts=CHECKBUTTON_NORMAL,FXint x=0,FXint y=0,FXint w=0,FXint h=0,FXint pl=DEFAULT_PAD,FXint pr=DEFAULT_PAD,FXint pt=DEFAULT_PAD,FXint pb=DEFAULT_PAD);
+
+  /**
+  * Set the disabled-label style: true always engraved, false always
+  * flat, maybe (the default) follows the theme's SETTINGS/engrave3dstyle.
+  */
+  void setEngrave3DStyle(FXuchar style=maybe);
+
+  /// Return the disabled-label style as set: true, false, or maybe (follows the theme)
+  FXuchar getEngrave3DStyle() const { return engraveMode; }
 
   /// Get default width: 19 + text width, so the focus rectangle fits
   virtual FXint getDefaultWidth();

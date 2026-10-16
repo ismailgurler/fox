@@ -74,6 +74,7 @@ FXIMPLEMENT(CYTCommandButton,FXButton,CYTCommandButtonMap,ARRAYNUMBER(CYTCommand
 CYTCommandButton::CYTCommandButton(FXComposite* p,const FXString& text,FXIcon* ic,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
   FXButton(p,text,ic,tgt,sel,opts|BUTTON_DEFAULT,x,y,w,h,pl,pr,pt,pb),
   engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)),
+  engraveMode(maybe),
   themeStyle(FXCLAMP(CYT_STYLE_95,getApp()->reg().readIntEntry("SETTINGS","themestyle",CYT_STYLE_95),CYT_STYLE_2000)){
   }
 
@@ -203,7 +204,7 @@ long CYTCommandButton::onPaint(FXObject*,FXSelector,void* ptr){
   if(!label.empty()){
     dc.setFont(font);
     if(!isEnabled()){
-      if(engrave3DStyle){
+      if(engravedLabel()){
         // Engraved (Windows 2000 style): hiliteColor copy offset +1,+1
         // behind a shadowColor copy on top -- Win2000 changed the standard
         // BUTTON control to match what the Toolbar common control always
@@ -239,6 +240,17 @@ long CYTCommandButton::onPaint(FXObject*,FXSelector,void* ptr){
     }
 
   return 1;
+  }
+
+
+// Set the disabled-label style explicitly: true engraved, false flat,
+// maybe follows the theme again; any other value counts as true
+void CYTCommandButton::setEngrave3DStyle(FXuchar style){
+  if(style!=maybe) style=(style!=false);
+  if(engraveMode!=style){
+    engraveMode=style;
+    update();
+    }
   }
 
 }

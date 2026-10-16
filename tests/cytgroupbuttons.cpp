@@ -12,16 +12,30 @@
 #define BTN_H     23
 
 
-// One group box holding a row of buttons side by side
+// Disabled-label override: CYT widgets take an explicit setting; stock FOX
+// widgets have none, so their rows show FOX's own disabled look
+static void engraveStyle(FXWindow*,FXuchar){}
+static void engraveStyle(CYTGroupBox* w,FXuchar s){ w->setEngrave3DStyle(s); }
+static void engraveStyle(CYTCommandButton* w,FXuchar s){ w->setEngrave3DStyle(s); }
+
+
+// One group box holding a row of buttons side by side; a disabled one takes
+// a disabled-label style for the box title and every button (maybe = theme)
 template<class GROUPBOX,class BUTTON>
-static GROUPBOX* buttonRow(FXComposite* column,const FXString& title,FXbool enabled){
+static GROUPBOX* buttonRow(FXComposite* column,const FXString& title,FXbool enabled,FXuchar style=maybe){
   GROUPBOX *g=new GROUPBOX(column,title,GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
   const FXchar *labels[]={"OK","Cancel","Apply"};
   for(FXint i=0; i<3; i++){
     BUTTON *b=new BUTTON(g,labels[i],nullptr,nullptr,0,BTN_OPTS|(i==0?BUTTON_DEFAULT|BUTTON_INITIAL:BUTTON_DEFAULT),0,0,BTN_W,BTN_H);
-    if(!enabled) b->disable();
+    if(!enabled){
+      b->disable();
+      engraveStyle(b,style);
+      }
     }
-  if(!enabled) g->disable();
+  if(!enabled){
+    g->disable();
+    engraveStyle(g,style);
+    }
   return g;
   }
 
@@ -30,7 +44,9 @@ static GROUPBOX* buttonRow(FXComposite* column,const FXString& title,FXbool enab
 template<class GROUPBOX,class BUTTON>
 static void populate(FXComposite* column){
   buttonRow<GROUPBOX,BUTTON>(column,"Buttons",true);
-  buttonRow<GROUPBOX,BUTTON>(column,"Disabled",false);
+  buttonRow<GROUPBOX,BUTTON>(column,"Disabled (theme)",false);
+  buttonRow<GROUPBOX,BUTTON>(column,"Disabled, engraved",false,true);
+  buttonRow<GROUPBOX,BUTTON>(column,"Disabled, flat",false,false);
   GROUPBOX *g=buttonRow<GROUPBOX,BUTTON>(column,FXString::null,true);
   fxmessage("%s column: %s + %s\n",GROUPBOX::metaClass.getClassName(),g->getClassName(),g->getFirst()->getClassName());
   }

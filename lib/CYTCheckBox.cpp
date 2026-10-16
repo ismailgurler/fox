@@ -105,6 +105,7 @@ static FXColor cytAverage(FXColor a,FXColor b){
 CYTCheckBox::CYTCheckBox(FXComposite* p,const FXString& text,FXObject* tgt,FXSelector sel,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb):
   FXCheckButton(p,text,tgt,sel,opts,x,y,w,h,pl,pr,pt,pb),
   engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)),
+  engraveMode(maybe),
   themeStyle(FXCLAMP(CYT_STYLE_95,getApp()->reg().readIntEntry("SETTINGS","themestyle",CYT_STYLE_95),CYT_STYLE_2000)){
   }
 
@@ -244,7 +245,7 @@ long CYTCheckBox::onPaint(FXObject*,FXSelector,void* ptr){
     FXint th=labelHeight(label);
     dc.setFont(font);
     if(!enabled){
-      if(engrave3DStyle){
+      if(engravedLabel()){
         // Engraved (Windows 2000 style): hiliteColor copy at +1,+1 under
         // the shadowColor text -- same two-pass treatment as CYTCommandButton
         dc.setForeground(hiliteColor);
@@ -272,6 +273,17 @@ long CYTCheckBox::onPaint(FXObject*,FXSelector,void* ptr){
 
   drawFrame(dc,0,0,width,height);
   return 1;
+  }
+
+
+// Set the disabled-label style explicitly: true engraved, false flat,
+// maybe follows the theme again; any other value counts as true
+void CYTCheckBox::setEngrave3DStyle(FXuchar style){
+  if(style!=maybe) style=(style!=false);
+  if(engraveMode!=style){
+    engraveMode=style;
+    update();
+    }
   }
 
 }

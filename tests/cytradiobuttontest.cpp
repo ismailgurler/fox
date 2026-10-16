@@ -9,28 +9,54 @@
 // Zero padding and a fixed height, so the control rectangle is exactly the
 // Windows one (spec section 4): heights 16 and 17 exercise the 0/-1 text
 // offset rule, and the focus rectangle's corner-dot parity
-#define RADIO_OPTS (RADIOBUTTON_NORMAL|JUSTIFY_LEFT|LAYOUT_FIX_HEIGHT)
+#define RADIO_OPTS (RADIOBUTTON_NORMAL|JUSTIFY_LEFT|LAYOUT_FIX_WIDTH|LAYOUT_FIX_HEIGHT)
+
+// Wider than the label needs, so the empty strip right of the text can be
+// clicked: the whole control rectangle is the hit area (spec section 4)
+#define RADIO_W 160
+
+
+// Disabled-label override: CYT widgets take an explicit setting; stock FOX
+// widgets have none, so their rows show FOX's own disabled look
+static void engraveStyle(FXWindow*,FXuchar){}
+static void engraveStyle(CYTGroupBox* w,FXuchar s){ w->setEngrave3DStyle(s); }
+static void engraveStyle(CYTRadioButton* w,FXuchar s){ w->setEngrave3DStyle(s); }
+
+
+// A disabled group with a checked and an unchecked radio; style applies to
+// the box title and both radios (maybe = follow the theme)
+template<class GROUPBOX,class RADIO>
+static RADIO* disabledPair(FXComposite* column,const FXString& title,FXuchar style){
+  GROUPBOX *g=new GROUPBOX(column,title,GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
+  g->disable();
+  engraveStyle(g,style);
+  RADIO *r=new RADIO(g,"&Checked",nullptr,0,RADIO_OPTS,0,0,RADIO_W,16,0,0,0,0);
+  r->setCheck(true);
+  r->disable();
+  engraveStyle(r,style);
+  r=new RADIO(g,"&Unchecked",nullptr,0,RADIO_OPTS,0,0,RADIO_W,16,0,0,0,0);
+  r->disable();
+  engraveStyle(r,style);
+  return r;
+  }
 
 
 // One group box of mutually exclusive radios (linked through one data
-// target), plus a disabled pair, built by either class pair
+// target), plus disabled pairs, built by either class pair
 template<class GROUPBOX,class RADIO>
 static void populate(FXComposite* column,FXDataTarget* h16,FXDataTarget* h17){
   const FXchar *labels[]={"&Multiple","&Single","Te&xtured","Soli&d"};
   GROUPBOX *g=new GROUPBOX(column,"Height 16",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
   for(FXint i=0; i<4; i++){
-    new RADIO(g,labels[i],h16,FXDataTarget::ID_OPTION+i,RADIO_OPTS,0,0,0,16,0,0,0,0);
+    new RADIO(g,labels[i],h16,FXDataTarget::ID_OPTION+i,RADIO_OPTS,0,0,RADIO_W,16,0,0,0,0);
     }
   g=new GROUPBOX(column,"Height 17",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
   for(FXint i=0; i<4; i++){
-    new RADIO(g,labels[i],h17,FXDataTarget::ID_OPTION+i,RADIO_OPTS,0,0,0,17,0,0,0,0);
+    new RADIO(g,labels[i],h17,FXDataTarget::ID_OPTION+i,RADIO_OPTS,0,0,RADIO_W,17,0,0,0,0);
     }
-  g=new GROUPBOX(column,"Disabled",GROUPBOX_TITLE_LEFT|FRAME_GROOVE|LAYOUT_FILL_X);
-  RADIO *r=new RADIO(g,"&Checked",nullptr,0,RADIO_OPTS,0,0,0,16,0,0,0,0);
-  r->setCheck(true);
-  r->disable();
-  r=new RADIO(g,"&Unchecked",nullptr,0,RADIO_OPTS,0,0,0,16,0,0,0,0);
-  r->disable();
+  disabledPair<GROUPBOX,RADIO>(column,"Disabled (theme)",maybe);
+  disabledPair<GROUPBOX,RADIO>(column,"Disabled, engraved",true);
+  RADIO *r=disabledPair<GROUPBOX,RADIO>(column,"Disabled, flat",false);
   fxmessage("%s column: %s + %s\n",RADIO::metaClass.getClassName(),g->getClassName(),r->getClassName());
   }
 

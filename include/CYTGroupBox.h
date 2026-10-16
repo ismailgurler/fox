@@ -49,14 +49,18 @@ namespace FX {
 * Disabled-text style (flat Win95/98 gray vs. engraved Win2000) mirrors
 * CYTCommandButton's: read once, at construction, from the registry key
 * SETTINGS/engrave3dstyle -- false (flat gray) unless that key says
-* otherwise.
+* otherwise. setEngrave3DStyle(true/false) overrides it for one group box;
+* maybe (the default) follows the key.
 */
 class FXAPI CYTGroupBox : public FXGroupBox {
   FXDECLARE(CYTGroupBox)
 protected:
-  FXbool engrave3DStyle;
+  FXbool engrave3DStyle;        // Theme's SETTINGS/engrave3dstyle, read at construction
+  FXuchar engraveMode;          // Explicit override: true, false, or maybe (follow theme)
 protected:
-  CYTGroupBox():engrave3DStyle(false){}
+  FXbool engravedLabel() const { return engraveMode==maybe ? engrave3DStyle : engraveMode!=false; }
+protected:
+  CYTGroupBox():engrave3DStyle(false),engraveMode(maybe){}
 private:
   CYTGroupBox(const CYTGroupBox&);
   CYTGroupBox &operator=(const CYTGroupBox&);
@@ -73,6 +77,15 @@ public:
 
   /// Construct group box; same signature as FXGroupBox
   CYTGroupBox(FXComposite* p,const FXString& text,FXuint opts=GROUPBOX_NORMAL,FXint x=0,FXint y=0,FXint w=0,FXint h=0,FXint pl=DEFAULT_SPACING,FXint pr=DEFAULT_SPACING,FXint pt=DEFAULT_SPACING,FXint pb=DEFAULT_SPACING,FXint hs=DEFAULT_SPACING,FXint vs=DEFAULT_SPACING);
+
+  /**
+  * Set the disabled-label style: true always engraved, false always
+  * flat, maybe (the default) follows the theme's SETTINGS/engrave3dstyle.
+  */
+  void setEngrave3DStyle(FXuchar style=maybe);
+
+  /// Return the disabled-label style as set: true, false, or maybe (follows the theme)
+  FXuchar getEngrave3DStyle() const { return engraveMode; }
   };
 
 }

@@ -59,7 +59,8 @@ FXIMPLEMENT(CYTGroupBox,FXGroupBox,CYTGroupBoxMap,ARRAYNUMBER(CYTGroupBoxMap))
 // CYTCommandButton -- see the doc comment in CYTGroupBox.h.
 CYTGroupBox::CYTGroupBox(FXComposite* p,const FXString& text,FXuint opts,FXint x,FXint y,FXint w,FXint h,FXint pl,FXint pr,FXint pt,FXint pb,FXint hs,FXint vs):
   FXGroupBox(p,text,opts,x,y,w,h,pl,pr,pt,pb,hs,vs),
-  engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)){
+  engrave3DStyle(getApp()->reg().readBoolEntry("SETTINGS","engrave3dstyle",false)),
+  engraveMode(maybe){
   }
 
 
@@ -162,7 +163,7 @@ long CYTGroupBox::onPaint(FXObject*,FXSelector,void* ptr){
   if(hasLabel){
     dc.setFont(font);
     if(!isEnabled()){
-      if(engrave3DStyle){
+      if(engravedLabel()){
         // Engraved (Windows 2000 style) -- see CYTCommandButton's Disabled
         // (engraved) state for the same two-pass treatment
         dc.setForeground(hiliteColor);
@@ -183,6 +184,17 @@ long CYTGroupBox::onPaint(FXObject*,FXSelector,void* ptr){
     }
 
   return 1;
+  }
+
+
+// Set the disabled-label style explicitly: true engraved, false flat,
+// maybe follows the theme again; any other value counts as true
+void CYTGroupBox::setEngrave3DStyle(FXuchar style){
+  if(style!=maybe) style=(style!=false);
+  if(engraveMode!=style){
+    engraveMode=style;
+    update();
+    }
   }
 
 }

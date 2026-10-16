@@ -62,7 +62,9 @@ enum {
 * real-Windows behaviors from different eras, which one CYTCommandButton uses is
 * read once, at construction, from the registry key SETTINGS/engrave3dstyle
 * (set via ControlPanel's General page) -- false (Win95/98 flat gray)
-* unless that key says otherwise. See PLAN.md, chicagouireplica branch.
+* unless that key says otherwise. setEngrave3DStyle(true/false) overrides
+* it for one button; maybe (the default) follows the key. See PLAN.md,
+* chicagouireplica branch.
 *
 * Border style is likewise selectable (CYT_STYLE_95/98/2000, read once at
 * construction from SETTINGS/themestyle, set via ControlPanel's "Theme
@@ -77,10 +79,13 @@ enum {
 class FXAPI CYTCommandButton : public FXButton {
   FXDECLARE(CYTCommandButton)
 protected:
-  FXbool engrave3DStyle;
+  FXbool engrave3DStyle;        // Theme's SETTINGS/engrave3dstyle, read at construction
+  FXuchar engraveMode;          // Explicit override: true, false, or maybe (follow theme)
   FXint  themeStyle;
 protected:
-  CYTCommandButton():engrave3DStyle(false),themeStyle(CYT_STYLE_95){}
+  FXbool engravedLabel() const { return engraveMode==maybe ? engrave3DStyle : engraveMode!=false; }
+protected:
+  CYTCommandButton():engrave3DStyle(false),engraveMode(maybe),themeStyle(CYT_STYLE_95){}
 private:
   CYTCommandButton(const CYTCommandButton&);
   CYTCommandButton &operator=(const CYTCommandButton&);
@@ -90,6 +95,15 @@ public:
 
   /// Construct button with text and icon; same signature as FXButton
   CYTCommandButton(FXComposite* p,const FXString& text,FXIcon* ic=nullptr,FXObject* tgt=nullptr,FXSelector sel=0,FXuint opts=BUTTON_NORMAL,FXint x=0,FXint y=0,FXint w=0,FXint h=0,FXint pl=DEFAULT_PAD,FXint pr=DEFAULT_PAD,FXint pt=DEFAULT_PAD,FXint pb=DEFAULT_PAD);
+
+  /**
+  * Set the disabled-label style: true always engraved, false always
+  * flat, maybe (the default) follows the theme's SETTINGS/engrave3dstyle.
+  */
+  void setEngrave3DStyle(FXuchar style=maybe);
+
+  /// Return the disabled-label style as set: true, false, or maybe (follows the theme)
+  FXuchar getEngrave3DStyle() const { return engraveMode; }
   };
 
 }
